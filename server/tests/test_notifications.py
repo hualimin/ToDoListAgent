@@ -76,3 +76,14 @@ async def test_email_skipped_when_disabled(seeded):
     save_secrets(SecretsFile.model_validate(cur))
     ok = await notifications.send_email(title="T", body="B")
     assert ok is False
+
+
+def test_webhook_failure_returns_false_without_leaking_url(seeded, monkeypatch):
+    """网络异常时不能把含令牌的 URL 带入任何异常/返回。"""
+    def fake_post(url, *, json, timeout):
+        raise httpx.ConnectError("boom")  # 模拟网络故障
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    ok = notifications.send_webhook(0, title="T", body="B")
+    assert ok is False  # 不抛异常，返回 False
+    # URL 不应出现在任何抛出的异常里（send_webhook 自己吞掉了，不会带 URL 上抛）
