@@ -1,0 +1,47 @@
+# ===== 敏感信息 / 可剥离（开源安全）=====
+# 密钥与本地数据 —— 绝不提交
+config/secrets.local.json
+config/secrets.*.local.json
+server/data/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# 全量对话记录（个人过程数据）
+对话记录/
+
+# ===== 后端 Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ===== 前端 Node =====
+node_modules/
+dist/
+.vite/
+.next/
+*.log
+npm-debug.log*
+
+# ===== Capacitor / 移动构建产物 =====
+app/android/
+app/ios/
+app/.gradle/
+app/build/
+DerivedData/
+
+# ===== IDE / 系统 =====
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ===== Claude Code 本地配置（个人）=====
+.claude/settings.local.json
