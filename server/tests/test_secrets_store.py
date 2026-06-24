@@ -60,3 +60,31 @@ def test_agents_ignores_underscore_meta_keys(tmp_secrets):
     loaded = load_secrets()
     assert "task_parse" in loaded.agents
     assert "_comment" not in loaded.agents
+
+
+def test_loads_real_example_file(tmp_secrets):
+    # 用真实交付的 secrets.example.json（用户 cp 的模板）回环校验，
+    # 锁定 load_secrets 对其中嵌套 _ 前缀元键的契约。
+    example_path = getattr(config, "SECRETS_EXAMPLE_PATH", None) or (
+        config.PROJECT_ROOT / "config" / "secrets.example.json"
+    )
+    assert example_path.exists(), f"缺少模板文件: {example_path}"
+    tmp_secrets.write_text(example_path.read_text("utf-8"), "utf-8")
+
+    # 不应抛异常
+    loaded = load_secrets()
+
+    # 顶层 agents 的 _ 前缀元键被过滤掉
+    assert "_domestic_examples" not in loaded.agents
+    assert "_comment" not in loaded.agents
+    assert "_howto" not in loaded.agents
+
+    # 真实 Agent 条目可访问其实际字段（_role 等 _ 前缀元键不影响）
+    assert "task_parse" in loaded.agents
+    assert loaded.agents["task_parse"].base_url == "https://api.openai.com/v1"
+    assert loaded.agents["task_parse"].api_key == "sk-REPLACE_ME"
+    assert loaded.agents["task_parse"].model == "gpt-4o-mini"
+    # 其他真实 agent 条目同样可解析
+    assert "urgency_rank" in loaded.agents
+    assert "researcher" in loaded.agents
+    assert loaded.agents["researcher"].model == "gpt-4o"
