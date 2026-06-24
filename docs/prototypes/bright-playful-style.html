@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ToDoListAgent · 明快活力 风格原型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: {
+      bg:'#FFFBF5', card:'#FFFFFF', ink:'#1F1B16', ink2:'#6B6258', ink3:'#A89E92',
+      line:'#F0E6D6',
+      coral:'#FF6B5B', mango:'#FFB23E', sky:'#3FB8FF', grape:'#8B5CF6', mint:'#2BB673',
+    },
+    fontFamily: { sans:['Plus Jakarta Sans','sans-serif'], mono:['JetBrains Mono','monospace'] },
+  } } }
+</script>
+<style>
+  body { font-family:'Plus Jakarta Sans',sans-serif; background:#F3E9D6; }
+  .phone { width:372px; height:760px; border-radius:48px; background:#1F1B16; padding:10px;
+    box-shadow:0 30px 70px -20px rgba(31,27,22,.4); }
+  .screen { width:100%; height:100%; border-radius:40px; overflow:hidden; background:#FFFBF5; position:relative; display:flex; flex-direction:column; }
+  .scroll{overflow-y:auto} .scroll::-webkit-scrollbar{width:0}
+  .card{background:#FFF;border:1px solid #F0E6D6;border-radius:20px;box-shadow:0 4px 14px -8px rgba(31,27,22,.12)}
+  .hero{background:linear-gradient(135deg,#FF6B5B 0%,#FFB23E 100%);color:#fff}
+  .panel{display:none} .panel.active{display:block;animation:bounce .35s cubic-bezier(.2,.8,.2,1)}
+  @keyframes bounce{from{opacity:0;transform:translateY(8px) scale(.99)}to{opacity:1;transform:none}}
+  .navbtn.active{color:#1F1B16} .navbtn.active .pill{background:#1F1B16;color:#fff}
+  .chip{font-size:11px;padding:4px 10px;border-radius:999px;font-weight:600}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</head>
+<body class="min-h-screen">
+<div class="mx-auto max-w-6xl px-6 py-8">
+  <header class="mb-6">
+    <p class="text-xs tracking-[.2em] text-neutral-500 uppercase">Theme 04 · Bright &amp; Playful</p>
+    <h1 class="text-4xl font-extrabold tracking-tight mt-1">明快活力</h1>
+    <p class="text-neutral-500 mt-1 max-w-xl">暖底 + 圆润大圆角 + 多彩点缀（珊瑚/芒果/天蓝/葡萄）。轻快有动力，上手友好。</p>
+  </header>
+
+  <div class="flex flex-wrap items-start gap-10">
+    <div class="phone">
+      <div class="screen">
+        <div class="flex items-center justify-between px-6 pt-3 text-[11px] text-ink2"><span class="font-mono">9:24</span><span>● ●</span></div>
+
+        <div class="scroll flex-1 px-5 pb-24">
+          <!-- 待办 -->
+          <section class="panel active" data-screen="tasks">
+            <div class="flex items-baseline justify-between mt-3">
+              <h2 class="text-2xl font-extrabold tracking-tight">嗨，今天 5 件事</h2>
+            </div>
+            <p class="text-xs text-ink2 mt-0.5">已完成 1 件 · 加油 💪</p>
+
+            <!-- 完成趋势 hero -->
+            <div class="hero rounded-3xl p-4 mt-4">
+              <div class="flex items-baseline justify-between">
+                <p class="text-xs opacity-90 font-semibold">本周完成</p>
+                <p class="text-xs font-mono"><b>12</b>/18</p>
+              </div>
+              <div class="flex items-end gap-1.5 h-12 mt-2">
+                <div class="flex-1 rounded-lg bg-white/40" style="height:40%"></div>
+                <div class="flex-1 rounded-lg bg-white/40" style="height:70%"></div>
+                <div class="flex-1 rounded-lg bg-white/40" style="height:55%"></div>
+                <div class="flex-1 rounded-lg bg-white" style="height:90%"></div>
+                <div class="flex-1 rounded-lg bg-white/25" style="height:0%"></div>
+                <div class="flex-1 rounded-lg bg-white/25" style="height:0%"></div>
+                <div class="flex-1 rounded-lg bg-white/25" style="height:0%"></div>
+              </div>
+            </div>
+
+            <!-- 周历 -->
+            <div class="flex gap-1.5 mt-4">
+              <div class="flex-1 text-center py-2 card"><p class="text-[9px] text-ink3 font-mono">一</p><p class="text-sm font-bold">22</p></div>
+              <div class="flex-1 text-center py-2 card"><p class="text-[9px] text-ink3 font-mono">二</p><p class="text-sm">23</p></div>
+              <div class="flex-1 text-center py-2 text-white" style="background:#1F1B16;border-radius:16px"><p class="text-[9px] opacity-70 font-mono">三</p><p class="text-sm font-extrabold">24</p></div>
+              <div class="flex-1 text-center py-2 card"><p class="text-[9px] text-ink3 font-mono">四</p><p class="text-sm">25</p></div>
+              <div class="flex-1 text-center py-2 card"><p class="text-[9px] text-ink3 font-mono">五</p><p class="text-sm">26</p></div>
+              <div class="flex-1 text-center py-2 card opacity-50"><p class="text-[9px] text-ink3 font-mono">六</p><p class="text-sm">27</p></div>
+            </div>
+
+            <div class="flex gap-2 mt-4">
+              <span class="chip text-white" style="background:#1F1B16">今日</span>
+              <span class="chip text-ink2" style="background:#FFF;border:1px solid #F0E6D6">本周</span>
+              <span class="chip text-ink2" style="background:#FFF;border:1px solid #F0E6D6">全部</span>
+            </div>
+
+            <div class="mt-4 space-y-2.5">
+              <div class="card p-3.5 flex gap-3 cursor-pointer" onclick="openDetail()">
+                <span class="w-5 h-5 mt-0.5 rounded-full border-2" style="border-color:#FF6B5B"></span>
+                <div class="flex-1"><p class="text-sm font-bold">回复张工的邮件</p><p class="text-[11px] text-ink2 mt-0.5">🔥 紧急 · 15:00 · 文字</p></div>
+              </div>
+              <div class="card p-3.5 flex gap-3" style="border-left:4px solid #3FB8FF">
+                <span class="w-5 h-5 mt-0.5 rounded-full border-2" style="border-color:#3FB8FF"></span>
+                <div class="flex-1"><p class="text-sm font-bold">整理复盘笔记</p><p class="text-[11px] text-ink2 mt-0.5">进行中 · 语音备忘</p></div>
+              </div>
+              <div class="card p-3.5 flex gap-3 opacity-60">
+                <span class="w-5 h-5 mt-0.5 rounded-full flex items-center justify-center" style="background:#2BB673"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="3"><path d="M3 8l3 3 6-7"/></svg></span>
+                <div class="flex-1"><p class="text-sm line-through">看完《深度工作》第3章</p><p class="text-[11px] text-ink3 mt-0.5">已完成 ✅</p></div>
+              </div>
+              <div class="card p-3.5 flex gap-3 cursor-pointer" onclick="openDetail()">
+                <span class="w-5 h-5 mt-0.5 rounded-full border-2" style="border-color:#FFB23E"></span>
+                <div class="flex-1"><p class="text-sm font-bold">订生日蛋糕</p><p class="text-[11px] text-ink2 mt-0.5">高 · 今天 · 📷 拍照</p></div>
+              </div>
+            </div>
+            <button class="mt-3 w-full py-2.5 rounded-2xl text-sm font-bold text-white" style="background:linear-gradient(135deg,#FF6B5B,#FFB23E)">＋ 记一笔</button>
+          </section>
+
+          <!-- 反思 -->
+          <section class="panel" data-screen="reflect">
+            <h2 class="text-2xl font-extrabold tracking-tight mt-3">能力反思</h2>
+            <p class="text-xs text-ink2 mt-0.5">142 条 · 已聚类 8 类</p>
+            <div class="rounded-3xl p-4 mt-4" style="background:linear-gradient(135deg,#8B5CF6,#3FB8FF);color:#fff">
+              <p class="text-xs opacity-90 font-semibold">本周提问 ✨</p>
+              <p class="font-bold mt-1 leading-relaxed">哪个瞬间让你觉得能力卡住了？</p>
+              <button class="mt-3 chip text-grape" style="background:#fff">记录一个问题</button>
+            </div>
+            <p class="text-[11px] text-ink3 font-mono mt-5">按聚类</p>
+            <div class="mt-2 space-y-2.5">
+              <div class="card p-3.5 flex justify-between items-center"><div><p class="text-sm font-bold">并发与一致性</p><p class="text-[11px] text-ink2 mt-0.5">3 条 · 已调研</p></div><span class="chip text-white" style="background:#8B5CF6">技术</span></div>
+              <div class="card p-3.5 flex justify-between items-center"><div><p class="text-sm font-bold">汇报表达</p><p class="text-[11px] text-ink2 mt-0.5">2 条 · 待调研</p></div><span class="chip text-white" style="background:#FFB23E">沟通</span></div>
+            </div>
+          </section>
+
+          <!-- 学习 -->
+          <section class="panel" data-screen="learn">
+            <h2 class="text-2xl font-extrabold tracking-tight mt-3">学习路径</h2>
+            <div class="card p-4 mt-4">
+              <div class="flex justify-between items-baseline"><p class="text-sm font-extrabold">系统设计 · 从浅到深</p><span class="text-[11px] font-mono text-ink2">3/8</span></div>
+              <div class="h-2 rounded-full mt-2" style="background:#F0E6D6"><div class="h-2 rounded-full" style="width:37%;background:linear-gradient(90deg,#2BB673,#3FB8FF)"></div></div>
+              <ol class="mt-3 space-y-2 text-[12px]">
+                <li class="flex gap-2 text-ink2 line-through"><span class="w-5 h-5 rounded-full bg-mint text-white flex items-center justify-center text-[10px] font-bold">✓</span>什么是分布式系统</li>
+                <li class="flex gap-2 font-semibold"><span class="w-5 h-5 rounded-full text-white flex items-center justify-center text-[10px] font-bold" style="background:#3FB8FF">2</span>一致性模型 · 进行中</li>
+                <li class="flex gap-2 text-ink3"><span class="w-5 h-5 rounded-full border-2 flex items-center justify-center text-[10px]" style="border-color:#F0E6D6">3</span>缓存一致性</li>
+              </ol>
+            </div>
+            <button class="mt-3 w-full py-2.5 rounded-2xl text-sm font-bold text-white" style="background:#1F1B16">＋ 粘贴参考资料</button>
+          </section>
+
+          <!-- 设置 -->
+          <section class="panel" data-screen="settings">
+            <h2 class="text-2xl font-extrabold tracking-tight mt-3">设置</h2>
+            <div class="mt-4 space-y-2.5">
+              <div class="card p-3.5"><p class="text-[10px] text-ink3 font-mono uppercase">连接</p><p class="text-sm font-mono mt-1">192.168.1.5:8000</p></div>
+              <div class="card p-3.5 flex justify-between items-center"><span class="text-sm font-semibold">任务解析</span><span class="chip text-white" style="background:#2BB673">已配</span></div>
+              <div class="card p-3.5 flex justify-between items-center"><span class="text-sm font-semibold">编排 API</span><span class="chip" style="background:#F0E6D6;color:#6B6258">未配</span></div>
+              <div class="card p-3.5 flex justify-between items-center"><span class="text-sm font-semibold">邮件提醒</span><span class="chip" style="background:#F0E6D6;color:#6B6258">未配</span></div>
+            </div>
+            <p class="text-[11px] text-ink3 text-center mt-4">🔒 密钥仅存本地</p>
+          </section>
+        </div>
+
+        <!-- 详情 -->
+        <div id="detail" class="absolute inset-0 translate-y-full transition-transform duration-300 flex flex-col z-20" style="border-radius:40px;background:#FFFBF5">
+          <div class="hero px-5 py-4 rounded-b-3xl">
+            <div class="flex items-center justify-between"><button onclick="closeDetail()" class="text-sm font-bold">← 返回</button><span>···</span></div>
+            <div class="flex gap-2 mt-3"><span class="chip" style="background:rgba(255,255,255,.25)">🔥 紧急</span><span class="chip" style="background:rgba(255,255,255,.25)">待办</span></div>
+            <h3 class="text-xl font-extrabold mt-2 leading-tight">回复张工关于交付时间的邮件</h3>
+            <p class="text-xs opacity-90 mt-1">截止 06.24 15:00 · 文字 · 2 天前</p>
+          </div>
+          <div class="scroll flex-1 px-5 py-4">
+            <p class="text-[10px] text-ink3 uppercase tracking-wider mb-2">内容</p>
+            <p class="text-sm leading-relaxed text-ink2">核对排期后给张工明确答复，抄送项目组。</p>
+            <p class="text-[10px] text-ink3 uppercase tracking-wider mt-5 mb-2">原始记录</p>
+            <div class="card p-3 text-sm text-ink2">📝 文字："回复张工邮件，确认交付时间"</div>
+            <p class="text-[10px] text-ink3 uppercase tracking-wider mt-5 mb-2">提醒</p>
+            <p class="text-sm">邮件 + App 内 · 14:30</p>
+          </div>
+        </div>
+
+        <nav class="absolute bottom-0 inset-x-0 flex border-t border-line" style="background:rgba(255,251,245,.95);backdrop-filter:blur(8px)">
+          <button class="navbtn active flex-1 py-3 flex flex-col items-center text-[11px] font-bold" data-target="tasks"><span class="pill px-3 py-1 rounded-full">待办</span></button>
+          <button class="navbtn flex-1 py-3 flex flex-col items-center text-[11px] text-ink2" data-target="reflect"><span class="pill px-3 py-1 rounded-full">反思</span></button>
+          <button class="navbtn flex-1 py-3 flex flex-col items-center text-[11px] text-ink2" data-target="learn"><span class="pill px-3 py-1 rounded-full">学习</span></button>
+          <button class="navbtn flex-1 py-3 flex flex-col items-center text-[11px] text-ink2" data-target="settings"><span class="pill px-3 py-1 rounded-full">设置</span></button>
+        </nav>
+      </div>
+    </div>
+
+    <aside class="max-w-xs text-sm text-neutral-600 leading-relaxed space-y-3 pt-2">
+      <p><b class="text-neutral-900">风格</b>：暖底 + 大圆角 + 渐变 hero + 多彩状态点（珊瑚紧急/天蓝进行/薄荷完成/芒果延期）。轻快、有动力。</p>
+      <p><b>新增功能</b>：渐变完成趋势卡、彩色聚类标签、编号式学习节点、详情 hero 头。</p>
+      <p><b>适合</b>：想要正向反馈感、上手轻快、喜欢一点活力。</p>
+      <p class="text-neutral-400 text-xs pt-2 border-t border-neutral-300">点任务卡进入详情。</p>
+    </aside>
+  </div>
+</div>
+<script>
+  function openDetail(){document.getElementById('detail').classList.remove('translate-y-full')}
+  function closeDetail(){document.getElementById('detail').classList.add('translate-y-full')}
+  const nav=document.querySelectorAll('.navbtn'),panels=document.querySelectorAll('.panel');
+  nav.forEach(b=>b.onclick=()=>{const t=b.dataset.target;nav.forEach(x=>{const on=x===b;x.classList.toggle('active',on);x.classList.toggle('text-ink2',!on);});panels.forEach(p=>p.classList.toggle('active',p.dataset.screen===t))});
+</script>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ToDoListAgent · 5 套主题总览</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; background:#ECE7DC; color:#24211C; }
+  .preview-box { width: 186px; height: 380px; overflow: hidden; border-radius: 22px; box-shadow: 0 10px 30px -12px rgba(0,0,0,.3); position:relative; }
+  .preview-box iframe { width: 372px; height: 760px; border: 0; transform: scale(0.5); transform-origin: top left; pointer-events: none; }
+  .card { background:#FBF8F0; border:1px solid #E2DAC4; border-radius: 20px; padding: 16px; transition: transform .2s, box-shadow .2s; }
+  .card:hover { transform: translateY(-3px); box-shadow: 0 14px 30px -14px rgba(0,0,0,.3); }
+  .swatch { width:14px; height:14px; border-radius:4px; display:inline-block; border:1px solid rgba(0,0,0,.1); }
+  .openbtn { display:inline-block; margin-top:10px; padding:6px 14px; border-radius:999px; background:#24211C; color:#FBF8F0; font-size:12px; text-decoration:none; }
+  a.tag { font-size:11px; color:#6E6557; }
+  @media (prefers-reduced-motion: reduce){ .card{transition:none} .card:hover{transform:none} }
+</style>
+</head>
+<body>
+<div class="mx-auto max-w-7xl px-6 py-10">
+  <header class="mb-8">
+    <p class="text-xs tracking-[.2em] uppercase text-neutral-500">ToDoListAgent · 主题选型总览</p>
+    <h1 class="text-3xl font-bold mt-1">5 套风格，挑一个方向</h1>
+    <p class="text-neutral-500 mt-2 max-w-2xl">下方同屏缩略对比（不可交互），点「打开完整版」进入可点击切换/查看详情的原型。每套都已含：周历日期带、完成趋势、范围筛选、任务详情页、聚类归并。</p>
+  </header>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+
+    <!-- 01 纸本日记 -->
+    <div class="card">
+      <div class="preview-box"><iframe src="paper-journal-style.html" loading="lazy"></iframe></div>
+      <p class="text-xs text-neutral-400 mt-3">01</p>
+      <p class="font-bold mt-0.5">纸本日记</p>
+      <p class="text-xs text-neutral-500 mt-1 leading-relaxed">暖纸 + 颗粒 + 朱砂印章，沉静手账感</p>
+      <div class="mt-2"><span class="swatch" style="background:#F6EFE1"></span><span class="swatch" style="background:#24211C"></span><span class="swatch" style="background:#B23A2D"></span><span class="swatch" style="background:#4E6E54"></span></div>
+      <a class="openbtn" href="paper-journal-style.html" target="_blank">打开完整版 →</a>
+    </div>
+
+    <!-- 02 瑞士极简 -->
+    <div class="card">
+      <div class="preview-box"><iframe src="swiss-minimal-style.html" loading="lazy"></iframe></div>
+      <p class="text-xs text-neutral-400 mt-3">02</p>
+      <p class="font-bold mt-0.5">瑞士极简</p>
+      <p class="text-xs text-neutral-500 mt-1 leading-relaxed">严格网格 + 黑白蓝，理性高密度</p>
+      <div class="mt-2"><span class="swatch" style="background:#FFFFFF;border-color:#ccc"></span><span class="swatch" style="background:#0A0A0A"></span><span class="swatch" style="background:#2563EB"></span></div>
+      <a class="openbtn" href="swiss-minimal-style.html" target="_blank">打开完整版 →</a>
+    </div>
+
+    <!-- 03 墨夜专注 -->
+    <div class="card">
+      <div class="preview-box"><iframe src="midnight-focus-style.html" loading="lazy"></iframe></div>
+      <p class="text-xs text-neutral-400 mt-3">03</p>
+      <p class="font-bold mt-0.5">墨夜专注</p>
+      <p class="text-xs text-neutral-500 mt-1 leading-relaxed">深色 + 青色霓虹，沉浸护眼</p>
+      <div class="mt-2"><span class="swatch" style="background:#0B0F14"></span><span class="swatch" style="background:#E6EDF3"></span><span class="swatch" style="background:#5EEAD4"></span></div>
+      <a class="openbtn" href="midnight-focus-style.html" target="_blank">打开完整版 →</a>
+    </div>
+
+    <!-- 04 明快活力 -->
+    <div class="card">
+      <div class="preview-box"><iframe src="bright-playful-style.html" loading="lazy"></iframe></div>
+      <p class="text-xs text-neutral-400 mt-3">04</p>
+      <p class="font-bold mt-0.5">明快活力</p>
+      <p class="text-xs text-neutral-500 mt-1 leading-relaxed">暖底 + 渐变 + 多彩，轻快有动力</p>
+      <div class="mt-2"><span class="swatch" style="background:#FFFBF5;border-color:#ccc"></span><span class="swatch" style="background:#FF6B5B"></span><span class="swatch" style="background:#FFB23E"></span><span class="swatch" style="background:#3FB8FF"></span></div>
+      <a class="openbtn" href="bright-playful-style.html" target="_blank">打开完整版 →</a>
+    </div>
+
+    <!-- 05 自然手作 -->
+    <div class="card">
+      <div class="preview-box"><iframe src="botanical-style.html" loading="lazy"></iframe></div>
+      <p class="text-xs text-neutral-400 mt-3">05</p>
+      <p class="font-bold mt-0.5">自然手作</p>
+      <p class="text-xs text-neutral-500 mt-1 leading-relaxed">鼠尾草绿 + 陶土，有机治愈</p>
+      <div class="mt-2"><span class="swatch" style="background:#F5F1E8;border-color:#ccc"></span><span class="swatch" style="background:#6B8E5A"></span><span class="swatch" style="background:#C17A54"></span></div>
+      <a class="openbtn" href="botanical-style.html" target="_blank">打开完整版 →</a>
+    </div>
+
+  </div>
+
+  <div class="mt-10 p-5 rounded-2xl" style="background:#FBF8F0;border:1px solid #E2DAC4;">
+    <p class="font-bold">怎么选</p>
+    <ul class="text-sm text-neutral-600 mt-2 space-y-1 list-disc pl-5">
+      <li><b>要沉静手账感</b> → 01 纸本日记</li>
+      <li><b>要理性高密度、任务多</b> → 02 瑞士极简</li>
+      <li><b>常夜间深度用</b> → 03 墨夜专注</li>
+      <li><b>要轻快、正向反馈</b> → 04 明快活力</li>
+      <li><b>要治愈松弛、长期用</b> → 05 自然手作</li>
+    </ul>
+    <p class="text-xs text-neutral-400 mt-3">选定后告诉我编号（或混搭，如"01 的纸感 + 04 的多彩状态点"）。也欢迎把你自己的 5 个原型图发我，我对照合稿。</p>
+  </div>
+</div>
+</body>
+</html>

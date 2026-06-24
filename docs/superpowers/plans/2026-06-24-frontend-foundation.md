@@ -1313,9 +1313,717 @@ git commit -m "docs: 前端运行说明 + 端到端联调记录"
 
 ---
 
+---
+
+## 📌 v2 修订（2026-06-25）：主题化 UI 层（4 皮肤可切换）
+
+> **决策依据**：ADR-011。用户从原型选定 4 套（01 纸本 / 02 瑞士 / 04 活力 / 05 手作），要求运行时可切换；默认 05 手作；暗色暂不做。
+>
+> **取代关系**：本节**取代原 Task 6 / 7 / 8**（最小占位 UI）。原 **Task 1-5（逻辑层：脚手架/数据/API/同步/状态）与 Task 9-11（Capacitor/启动/联调）保持有效**。
+>
+> **新增执行顺序**：Task 1-5（原）→ **Task 6′ ~ Task 10′（本节，主题化 UI）** → Task 9-11（原，依次作为 Task 11/12/13）。
+>
+> **核心抽象**：CSS 变量主题层。组件用 `bg-bg text-ink border-line accent` 等"语义类"，Tailwind 把它们映射到 CSS 变量（`--c-bg` 等）；`ThemeProvider` 按当前主题写变量，切换即换肤。小布局差异用 `variant: 'stamp'|'dot'|'gradient'` 开关条件渲染。
+
+### Task 6′: 主题系统（4 皮肤 + 切换 + Provider）
+
+**Files:** Create `app/src/themes/tokens.ts`、`themeStore.ts`、`ThemeProvider.tsx`；Modify `app/tailwind.config.js`、`app/src/index.css`、`app/src/main.tsx`（包 ThemeProvider）；Create `app/src/themes/themeStore.test.ts`
+
+- [ ] **Step 1: `app/src/themes/tokens.ts`**（4 套主题 token）
+```ts
+export type ThemeId = 'botanical' | 'paper' | 'swiss' | 'bright'
+export type Variant = 'stamp' | 'dot' | 'gradient'
+
+export interface ThemeTokens {
+  id: ThemeId; name: string
+  bg: string; bg2: string; card: string
+  ink: string; ink2: string; ink3: string; line: string
+  accent: string; done: string; late: string; urgent: string
+  fontDisplay: string; fontBody: string
+  cardRadius: string; pillRadius: string
+  variant: Variant
+}
+
+export const THEMES: Record<ThemeId, ThemeTokens> = {
+  botanical: { id:'botanical', name:'自然手作', bg:'#F5F1E8', bg2:'#EFE9DA', card:'#FBF8F0', ink:'#2E3A2E', ink2:'#5E6B58', ink3:'#9AA28E', line:'#E2DAC4', accent:'#6B8E5A', done:'#6B8E5A', late:'#D4B063', urgent:'#C17A54', fontDisplay:"'Fraunces', serif", fontBody:"'Nunito', sans-serif", cardRadius:'24px', pillRadius:'999px', variant:'dot' },
+  paper:     { id:'paper', name:'纸本日记', bg:'#F6EFE1', bg2:'#FCF8EF', card:'#FBF6EA', ink:'#24211C', ink2:'#6E6557', ink3:'#A89F8E', line:'#E3D9C4', accent:'#B23A2D', done:'#4E6E54', late:'#A9791C', urgent:'#B23A2D', fontDisplay:"'Newsreader','LXGW WenKai Screen',serif", fontBody:"'LXGW WenKai Screen',serif", cardRadius:'14px', pillRadius:'7px', variant:'stamp' },
+  swiss:     { id:'swiss', name:'瑞士极简', bg:'#FFFFFF', bg2:'#F4F4F2', card:'#FFFFFF', ink:'#0A0A0A', ink2:'#525252', ink3:'#A3A3A3', line:'#E5E5E5', accent:'#2563EB', done:'#16A34A', late:'#D97706', urgent:'#2563EB', fontDisplay:"'Inter',sans-serif", fontBody:"'Inter',sans-serif", cardRadius:'0px', pillRadius:'0px', variant:'dot' },
+  bright:    { id:'bright', name:'明快活力', bg:'#FFFBF5', bg2:'#FFFFFF', card:'#FFFFFF', ink:'#1F1B16', ink2:'#6B6258', ink3:'#A89E92', line:'#F0E6D6', accent:'#FF6B5B', done:'#2BB673', late:'#FFB23E', urgent:'#FF6B5B', fontDisplay:"'Plus Jakarta Sans',sans-serif", fontBody:"'Plus Jakarta Sans',sans-serif", cardRadius:'20px', pillRadius:'999px', variant:'gradient' },
+}
+export const DEFAULT_THEME: ThemeId = 'botanical'
+```
+
+- [ ] **Step 2: `app/src/themes/themeStore.ts`**
+```ts
+import { create } from 'zustand'
+import { THEMES, DEFAULT_THEME, type ThemeId } from './tokens'
+
+const KEY = 'tdla.theme'
+function load(): ThemeId {
+  try { const v = localStorage.getItem(KEY) as ThemeId | null; if (v && THEMES[v]) return v } catch { /* ignore */ }
+  return DEFAULT_THEME
+}
+interface ThemeState { id: ThemeId; setId: (id: ThemeId) => void }
+export const useThemeStore = create<ThemeState>((set) => ({
+  id: load(),
+  setId: (id) => { try { localStorage.setItem(KEY, id) } catch { /* ignore */ } set({ id }) },
+}))
+```
+
+- [ ] **Step 3: `app/src/themes/themeStore.test.ts`**
+```ts
+import { describe, it, expect, beforeEach } from 'vitest'
+import { useThemeStore } from './themeStore'
+import { DEFAULT_THEME } from './tokens'
+
+describe('themeStore', () => {
+  beforeEach(() => { localStorage.clear(); useThemeStore.setState({ id: DEFAULT_THEME }) })
+
+  it('默认主题为 botanical', () => {
+    expect(useThemeStore.getState().id).toBe('botanical')
+  })
+  it('setId 切换并持久化', () => {
+    useThemeStore.getState().setId('paper')
+    expect(useThemeStore.getState().id).toBe('paper')
+    expect(localStorage.getItem('tdla.theme')).toBe('paper')
+  })
+})
+```
+
+- [ ] **Step 4: `app/src/themes/ThemeProvider.tsx`**（把 token 写进 CSS 变量）
+```tsx
+import { useEffect, type ReactNode } from 'react'
+import { useThemeStore } from './themeStore'
+import { THEMES } from './tokens'
+
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const id = useThemeStore((s) => s.id)
+  useEffect(() => {
+    const t = THEMES[id]
+    const r = document.documentElement
+    const set = (k: string, v: string) => r.style.setProperty(k, v)
+    set('--c-bg', t.bg); set('--c-bg2', t.bg2); set('--c-card', t.card)
+    set('--c-ink', t.ink); set('--c-ink2', t.ink2); set('--c-ink3', t.ink3); set('--c-line', t.line)
+    set('--c-accent', t.accent); set('--c-done', t.done); set('--c-late', t.late); set('--c-urgent', t.urgent)
+    set('--r-card', t.cardRadius); set('--r-pill', t.pillRadius)
+    set('--f-display', t.fontDisplay); set('--f-body', t.fontBody)
+    r.setAttribute('data-theme', id)
+  }, [id])
+  return <>{children}</>
+}
+```
+
+- [ ] **Step 5: 改 `app/tailwind.config.js`**——颜色映射到 CSS 变量（注意保留原 content/fontFamily，仅替换 colors）
+```js
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        bg: 'var(--c-bg)', bg2: 'var(--c-bg2)', card: 'var(--c-card)',
+        ink: 'var(--c-ink)', ink2: 'var(--c-ink2)', ink3: 'var(--c-ink3)', line: 'var(--c-line)',
+        accent: 'var(--c-accent)', done: 'var(--c-done)', late: 'var(--c-late)', urgent: 'var(--c-urgent)',
+      },
+      borderRadius: { card: 'var(--r-card)', pill: 'var(--r-pill)' },
+      fontFamily: { display: ['var(--f-display)'], body: ['var(--f-body)'] },
+    },
+  },
+  plugins: [],
+}
+```
+
+- [ ] **Step 6: 改 `app/src/index.css`**（字体导入 + base 用变量）
+```css
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;600;700&family=Nunito:wght@400;600;700&family=Newsreader:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+@import url('https://cdn.jsdelivr.net/npm/lxgw-wenkai-screen-webfont@1.7.0/style.css');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+:root { --c-bg:#F5F1E8; --c-bg2:#EFE9DA; --c-card:#FBF8F0; --c-ink:#2E3A2E; --c-ink2:#5E6B58; --c-ink3:#9AA28E; --c-line:#E2DAC4; --c-accent:#6B8E5A; --c-done:#6B8E5A; --c-late:#D4B063; --c-urgent:#C17A54; --r-card:24px; --r-pill:999px; --f-display:'Fraunces',serif; --f-body:'Nunito',sans-serif; }
+html, body, #root { height: 100%; }
+body { background: var(--c-bg); color: var(--c-ink); font-family: var(--f-body); }
+```
+
+- [ ] **Step 7: `app/src/main.tsx` 包 ThemeProvider**（若 Task 10′ 未改 main，此处先包上；最终 main 在原 Task 10 接线）
+```tsx
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { App } from './App'
+import { ThemeProvider } from './themes/ThemeProvider'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode><ThemeProvider><App /></ThemeProvider></React.StrictMode>,
+)
+```
+
+- [ ] **Step 8: 跑测试 + 提交**：`npx vitest run src/themes/` → 2 passed。
+```bash
+git add app/src/themes app/tailwind.config.js app/src/index.css app/src/main.tsx
+git commit -m "feat(app): 主题系统(4皮肤CSS变量+切换+Provider)"
+```
+
+### Task 7′: App 外壳 + 底部导航 + 路由（主题感知）
+
+**Files:** Create `app/src/components/Layout.tsx`、`BottomNav.tsx`、`app/src/pages/TasksPage.tsx`（占位，Task 8′ 实装）、`ReflectPage.tsx`（占位，Task 9′ 实装）、`LearnPage.tsx`（占位，Task 9′ 实装）、`SettingsPage.tsx`（占位，Task 10′ 实装）；Modify `app/src/App.tsx`；Create `app/src/__tests__/shell.test.tsx`
+
+- [ ] **Step 1: `app/src/components/BottomNav.tsx`**（用语义色，激活态 accent）
+```tsx
+import { NavLink } from 'react-router-dom'
+const items = [
+  { to: '/', label: '待办', end: true },
+  { to: '/reflect', label: '反思' },
+  { to: '/learn', label: '学习' },
+  { to: '/settings', label: '设置' },
+]
+export function BottomNav() {
+  return (
+    <nav className="flex border-t border-line" style={{ background: 'color-mix(in srgb, var(--c-card) 95%, transparent)', backdropFilter: 'blur(8px)' }}>
+      {items.map((it) => (
+        <NavLink key={it.to} to={it.to} end={it.end}
+          className={({ isActive }) => 'flex-1 py-3 text-center text-xs ' + (isActive ? 'text-accent font-semibold' : 'text-ink2')}>
+          {it.label}
+        </NavLink>
+      ))}
+    </nav>
+  )
+}
+```
+
+- [ ] **Step 2: `app/src/components/Layout.tsx`**
+```tsx
+import { Outlet } from 'react-router-dom'
+import { BottomNav } from './BottomNav'
+export function Layout() {
+  return (
+    <div className="mx-auto flex h-full max-w-md flex-col">
+      <main className="flex-1 overflow-auto"><Outlet /></main>
+      <BottomNav />
+    </div>
+  )
+}
+```
+
+- [ ] **Step 3-6: 四个占位页**（各一个最简标题，后续任务实装；均用语义色）
+```tsx
+// TasksPage.tsx
+export function TasksPage() { return <div className="p-5"><h1 className="font-display text-2xl text-ink">待办</h1></div> }
+// ReflectPage.tsx
+export function ReflectPage() { return <div className="p-5"><h1 className="font-display text-2xl text-ink">反思</h1></div> }
+// LearnPage.tsx
+export function LearnPage() { return <div className="p-5"><h1 className="font-display text-2xl text-ink">学习</h1></div> }
+// SettingsPage.tsx
+export function SettingsPage() { return <div className="p-5"><h1 className="font-display text-2xl text-ink">设置</h1></div> }
+```
+
+- [ ] **Step 7: `app/src/App.tsx`**
+```tsx
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { Layout } from './components/Layout'
+import { TasksPage } from './pages/TasksPage'
+import { ReflectPage } from './pages/ReflectPage'
+import { LearnPage } from './pages/LearnPage'
+import { SettingsPage } from './pages/SettingsPage'
+export function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index element={<TasksPage />} />
+          <Route path="reflect" element={<ReflectPage />} />
+          <Route path="learn" element={<LearnPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  )
+}
+```
+
+- [ ] **Step 8: 测试 `app/src/__tests__/shell.test.tsx`**（导航四入口 + 路由渲染）
+```tsx
+import { describe, it, expect } from 'vitest'
+import { render, screen, within } from '@testing-library/react'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { Layout } from '../components/Layout'
+import { TasksPage } from '../pages/TasksPage'
+import { ReflectPage } from '../pages/ReflectPage'
+function renderAt(p: string) {
+  return render(<MemoryRouter initialEntries={[p]}><Routes><Route element={<Layout />}>
+    <Route index element={<TasksPage />} /><Route path="reflect" element={<ReflectPage />} />
+  </Route></Routes></MemoryRouter>)
+}
+describe('外壳', () => {
+  it('底部导航含四入口', () => {
+    const { container } = renderAt('/')
+    const nav = container.querySelector('nav')!
+    ['待办','反思','学习','设置'].forEach((t) => expect(within(nav).getByText(t)).toBeInTheDocument())
+  })
+  it('路由渲染反思页', () => { renderAt('/reflect'); expect(screen.getByText('反思')).toBeInTheDocument() })
+})
+```
+
+- [ ] **Step 9: 跑全量 + 提交**：`npx vitest run` → 全绿。
+```bash
+git add app/src/components app/src/pages app/src/App.tsx app/src/__tests__/shell.test.tsx
+git commit -m "feat(app): 外壳+底部导航+路由(主题感知)"
+```
+
+### Task 8′: 待办页（周历日期带 + 完成趋势 + 范围筛选 + 任务卡 + 详情抽屉）
+
+**Files:** Create `app/src/components/WeekStrip.tsx`、`TrendChart.tsx`、`TaskCard.tsx`、`TaskDetail.tsx`、`app/src/lib/taskViews.ts`、`app/src/lib/taskViews.test.ts`；Modify `app/src/pages/TasksPage.tsx`；Create `app/src/__tests__/TasksPage.test.tsx`
+
+> 复杂的筛选/趋势计算抽到纯函数 `taskViews.ts` 便于单测；UI 用语义色，`variant` 决定小差异（paper=印章标签、bright=渐变 hero、其余=色点）。
+
+- [ ] **Step 1: `app/src/lib/taskViews.ts`**（纯函数：范围筛选 + 按日分组 + 完成趋势）
+```ts
+import type { Task } from '../db/types'
+export type Range = 'today' | 'week' | 'month' | 'all'
+
+export function withinRange(t: Task, range: Range, now = new Date()): boolean {
+  if (range === 'all') return true
+  const due = t.due_at ? new Date(t.due_at) : null
+  if (!due) return range === 'all'
+  const ms = now.getTime() - due.getTime()
+  const day = 86400000
+  if (range === 'today') return Math.abs(ms) < day && due.toDateString() === now.toDateString()
+  if (range === 'week') return ms <= 0 && ms > -7 * day
+  if (range === 'month') return ms <= 0 && ms > -30 * day
+  return true
+}
+
+export interface DayBucket { date: string; tasks: Task[] }
+export function groupByDay(tasks: Task[]): DayBucket[] {
+  const m = new Map<string, Task[]>()
+  for (const t of tasks) {
+    const key = (t.due_at ? new Date(t.due_at) : new Date()).toDateString()
+    if (!m.has(key)) m.set(key, [])
+    m.get(key)!.push(t)
+  }
+  return [...m.entries()].map(([date, ts]) => ({ date, tasks: ts })).sort((a, b) => +new Date(a.date) - +new Date(b.date))
+}
+
+export interface TrendPoint { label: string; done: number }
+export function weeklyTrend(tasks: Task[], now = new Date()): TrendPoint[] {
+  const labels = ['一', '二', '三', '四', '五', '六', '日']
+  const today = now.getDay() === 0 ? 6 : now.getDay() - 1
+  const monday = new Date(now); monday.setDate(now.getDate() - today); monday.setHours(0, 0, 0, 0)
+  const pts: TrendPoint[] = labels.map((label) => ({ label, done: 0 }))
+  for (const t of tasks) {
+    if (t.status !== 'done' || !t.updated_at) continue
+    const d = new Date(t.updated_at); const diff = Math.floor((d.getTime() - monday.getTime()) / 86400000)
+    if (diff >= 0 && diff < 7) pts[diff].done += 1
+  }
+  return pts
+}
+```
+
+- [ ] **Step 2: `app/src/lib/taskViews.test.ts`**（纯函数测试）
+```ts
+import { describe, it, expect } from 'vitest'
+import { withinRange, groupByDay, weeklyTrend } from './taskViews'
+import type { Task } from '../db/types'
+const now = new Date('2026-06-24T10:00:00Z') // 周三
+function mk(p: Partial<Task>): Task {
+  return { id: p.id ?? 'x', user_id: 1, title: p.title ?? 't', content: '', input_source: 'text', urgency: 'normal', status: p.status ?? 'todo', due_at: p.due_at ?? null, scheduled_at: null, board_order: 0, created_at: '2026-06-20T00:00:00Z', updated_at: p.updated_at ?? '2026-06-24T00:00:00Z', deleted_at: null, sync_state: 'clean' }
+}
+describe('taskViews', () => {
+  it('today 只含今天到期', () => {
+    expect(withinRange(mk({ due_at: '2026-06-24T09:00:00Z' }), 'today', now)).toBe(true)
+    expect(withinRange(mk({ due_at: '2026-06-25T09:00:00Z' }), 'today', now)).toBe(false)
+  })
+  it('groupByDay 按日分组', () => {
+    const r = groupByDay([mk({ due_at: '2026-06-24T09:00:00Z' }), mk({ due_at: '2026-06-24T11:00:00Z' }), mk({ due_at: '2026-06-25T09:00:00Z' })])
+    expect(r.length).toBe(2); expect(r[0].tasks.length).toBe(2)
+  })
+  it('weeklyTrend 统计本周已完成', () => {
+    const pts = weeklyTrend([mk({ status: 'done', updated_at: '2026-06-24T08:00:00Z' })], now) // 周三=index2
+    expect(pts[2].done).toBe(1); expect(pts[0].done).toBe(0)
+  })
+})
+```
+
+- [ ] **Step 3: 周历组件 `app/src/components/WeekStrip.tsx`**（7 天，高亮今日）
+```tsx
+const LABEL = ['一', '二', '三', '四', '五', '六', '日']
+export function WeekStrip() {
+  const now = new Date(); const todayIdx = now.getDay() === 0 ? 6 : now.getDay() - 1
+  const monday = new Date(now); monday.setDate(now.getDate() - todayIdx)
+  const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(monday); d.setDate(monday.getDate() + i); return d })
+  return (
+    <div className="flex gap-1.5">
+      {days.map((d, i) => {
+        const on = i === todayIdx
+        return (
+          <div key={i} className="flex-1 text-center py-2 border" style={on ? { background: 'var(--c-accent)', color: '#fff', borderColor: 'var(--c-accent)', borderRadius: 'var(--r-pill)' } : { background: 'var(--c-card)', borderColor: 'var(--c-line)', borderRadius: 'calc(var(--r-card)/2)' }}>
+            <p className="text-[9px] opacity-70">{LABEL[i]}</p>
+            <p className={'text-sm ' + (on ? 'font-bold' : '')}>{d.getDate()}</p>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+```
+
+- [ ] **Step 4: 趋势组件 `app/src/components/TrendChart.tsx`**
+```tsx
+import type { TrendPoint } from '../lib/taskViews'
+export function TrendChart({ points }: { points: TrendPoint[] }) {
+  const max = Math.max(1, ...points.map((p) => p.done))
+  return (
+    <div className="rounded-card border border-line p-3" style={{ background: 'var(--c-card)' }}>
+      <div className="flex items-baseline justify-between">
+        <p className="text-xs text-ink2">本周完成</p>
+      </div>
+      <div className="flex items-end gap-1.5 h-10 mt-2">
+        {points.map((p, i) => (
+          <div key={i} className="flex-1 flex flex-col items-center gap-1">
+            <div className="w-full" style={{ height: `${(p.done / max) * 100}%`, minHeight: p.done ? '4px' : '0', background: p.done ? 'var(--c-accent)' : 'var(--c-line)', borderRadius: 'calc(var(--r-pill)/2)' }} />
+            <span className="text-[9px] text-ink3">{p.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 5: 任务卡 `app/src/components/TaskCard.tsx`**（variant 差异：stamp/dot/gradient）
+```tsx
+import { useThemeStore } from '../themes/themeStore'
+import { THEMES } from '../themes/tokens'
+import type { Task } from '../db/types'
+const STATUS_LABEL: Record<string, string> = { todo: '待办', doing: '进行中', done: '已完成', shelved: '搁置', delayed: '延期' }
+export function TaskCard({ task, onOpen }: { task: Task; onOpen: (t: Task) => void }) {
+  const variant = THEMES[useThemeStore((s) => s.id)].variant
+  const dotColor = task.urgency === 'urgent' ? 'var(--c-urgent)' : task.urgency === 'high' ? 'var(--c-late)' : 'var(--c-ink3)'
+  return (
+    <div onClick={() => onOpen(task)} className="rounded-card border border-line p-3.5 flex gap-3 cursor-pointer" style={{ background: 'var(--c-card)', borderLeft: `3px solid ${dotColor}` }}>
+      <span className="mt-1.5 w-2 h-2 rounded-full" style={{ background: dotColor, opacity: task.status === 'done' ? 0.4 : 1 }} />
+      <div className="flex-1">
+        <p className={'text-sm ' + (task.status === 'done' ? 'line-through text-ink3' : 'text-ink')}>{task.title}</p>
+        <p className="text-[11px] text-ink3 mt-0.5">{task.due_at ? new Date(task.due_at).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : ''} · {task.input_source}</p>
+      </div>
+      {variant === 'stamp'
+        ? <span className="text-[10px] px-2 py-0.5 rounded-pill" style={{ border: `1px solid ${dotColor}`, color: dotColor }}>{STATUS_LABEL[task.status]}</span>
+        : <span className="text-[10px] px-2 py-0.5 rounded-pill text-ink2" style={{ background: 'var(--c-bg2)' }}>{STATUS_LABEL[task.status]}</span>}
+    </div>
+  )
+}
+```
+
+- [ ] **Step 6: 详情抽屉 `app/src/components/TaskDetail.tsx`**
+```tsx
+import type { Task } from '../db/types'
+const STATUS_LABEL: Record<string, string> = { todo: '待办', doing: '进行中', done: '已完成', shelved: '搁置', delayed: '延期' }
+export function TaskDetail({ task, onClose }: { task: Task | null; onClose: () => void }) {
+  if (!task) return null
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col" style={{ background: 'var(--c-bg)', borderRadius: 'inherit', transform: task ? 'none' : 'translateY(100%)', transition: 'transform .3s' }}>
+      <div className="flex items-center justify-between px-5 py-3 border-b border-line">
+        <button onClick={onClose} className="text-sm text-accent">← 返回</button>
+        <span className="text-[10px] text-ink3 uppercase">任务详情</span><span className="text-ink3">···</span>
+      </div>
+      <div className="flex-1 overflow-auto px-5 py-4">
+        <h3 className="text-xl font-bold text-ink leading-tight">{task.title}</h3>
+        <p className="text-xs text-ink3 mt-2">{task.due_at ? `截止 ${new Date(task.due_at).toLocaleString('zh-CN')}` : '无截止'} · 来源：{task.input_source}</p>
+        {task.content && <><p className="text-[10px] text-ink3 uppercase mt-5 mb-2">内容</p><p className="text-sm text-ink2 leading-relaxed">{task.content}</p></>}
+        <p className="text-[10px] text-ink3 uppercase mt-5 mb-2">原始记录</p>
+        <div className="rounded-card border border-line p-3 text-sm text-ink2" style={{ background: 'var(--c-card)' }}>
+          {task.input_source === 'voice' ? '🎙️ 语音（含转写）' : task.input_source === 'photo' ? '📷 图片 + 文字' : '📝 文字'}：{task.content || task.title}
+        </div>
+        <p className="text-[10px] text-ink3 uppercase mt-5 mb-2">状态</p>
+        <p className="text-sm text-ink">{STATUS_LABEL[task.status]} · {task.urgency}</p>
+      </div>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 7: 实装 `app/src/pages/TasksPage.tsx`**（组合：标题 + 趋势 + 周历 + 范围 Tab + 分组列表 + 详情）
+```tsx
+import { useState } from 'react'
+import { useTaskStore } from '../store/taskStore'
+import { WeekStrip } from '../components/WeekStrip'
+import { TrendChart } from '../components/TrendChart'
+import { TaskCard } from '../components/TaskCard'
+import { TaskDetail } from '../components/TaskDetail'
+import { withinRange, groupByDay, weeklyTrend, type Range } from '../lib/taskViews'
+import type { Task } from '../db/types'
+const RANGES: Range[] = ['today', 'week', 'month', 'all']
+const RANGE_LABEL: Record<Range, string> = { today: '今日', week: '本周', month: '本月', all: '全部' }
+export function TasksPage() {
+  const { tasks, createTask } = useTaskStore()
+  const [range, setRange] = useState<Range>('today')
+  const [open, setOpen] = useState<Task | null>(null)
+  const [title, setTitle] = useState('')
+  const filtered = tasks.filter((t) => withinRange(t, range))
+  const buckets = groupByDay(filtered)
+  const trend = weeklyTrend(tasks)
+  async function add() { const v = title.trim(); if (!v) return; await createTask({ title: v }); setTitle('') }
+  return (
+    <div className="p-5 pb-24">
+      <h1 className="font-display text-2xl text-ink">今日待办</h1>
+      <p className="text-xs text-ink2 mt-0.5">共 {tasks.length} 件</p>
+      <div className="mt-4"><TrendChart points={trend} /></div>
+      <div className="mt-4"><WeekStrip /></div>
+      <div className="flex gap-2 mt-4">
+        {RANGES.map((r) => (
+          <button key={r} onClick={() => setRange(r)} className="text-[11px] px-3 py-1 rounded-pill" style={r === range ? { background: 'var(--c-ink)', color: 'var(--c-bg)' } : { background: 'var(--c-card)', color: 'var(--c-ink2)', border: '1px solid var(--c-line)' }}>{RANGE_LABEL[r]}</button>
+        ))}
+      </div>
+      <div className="mt-4 space-y-3">
+        {buckets.length === 0 && <p className="text-sm text-ink3">该范围暂无任务</p>}
+        {buckets.map((b) => (
+          <div key={b.date}>
+            <p className="text-[11px] text-ink3 mb-2">{new Date(b.date).toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })}</p>
+            <div className="space-y-2">{b.tasks.map((t) => <TaskCard key={t.id} task={t} onOpen={setOpen} />)}</div>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2 mt-4">
+        <input className="flex-1 rounded-pill border border-line bg-card px-3 py-1.5 text-sm text-ink" placeholder="记一笔待办…" value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add() }} />
+        <button className="rounded-pill px-4 py-1.5 text-sm text-bg" style={{ background: 'var(--c-accent)' }} onClick={add}>添加</button>
+      </div>
+      <TaskDetail task={open} onClose={() => setOpen(null)} />
+    </div>
+  )
+}
+```
+
+- [ ] **Step 8: 测试 `app/src/__tests__/TasksPage.test.tsx`**
+```tsx
+import { describe, it, expect, beforeEach } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { TasksPage } from '../pages/TasksPage'
+import { useTaskStore } from '../store/taskStore'
+import { InMemoryTaskRepository } from '../db/InMemoryTaskRepository'
+import { ThemeProvider } from '../themes/ThemeProvider'
+beforeEach(() => { useTaskStore.getState().reset(new InMemoryTaskRepository()) })
+function ui() { return render(<ThemeProvider><TasksPage /></ThemeProvider>) }
+describe('TasksPage', () => {
+  it('创建任务后出现在列表', async () => {
+    ui()
+    await userEvent.type(screen.getByPlaceholderText('记一笔待办…'), '买牛奶')
+    await userEvent.click(screen.getByRole('button', { name: '添加' }))
+    expect(screen.getByText('买牛奶')).toBeInTheDocument()
+  })
+  it('点任务卡打开详情', async () => {
+    ui()
+    await userEvent.type(screen.getByPlaceholderText('记一笔待办…'), '开会')
+    await userEvent.click(screen.getByRole('button', { name: '添加' }))
+    await userEvent.click(screen.getByText('开会'))
+    expect(screen.getByText('任务详情')).toBeInTheDocument()
+  })
+})
+```
+
+- [ ] **Step 9: 跑测试 + 提交**：`npx vitest run` → 全绿（含 taskViews 纯函数 + TasksPage）。
+```bash
+git add app/src/lib app/src/components/WeekStrip.tsx app/src/components/TrendChart.tsx app/src/components/TaskCard.tsx app/src/components/TaskDetail.tsx app/src/pages/TasksPage.tsx app/src/__tests__/TasksPage.test.tsx
+git commit -m "feat(app): 待办页(周历+趋势+范围筛选+任务卡+详情抽屉)"
+```
+
+### Task 9′: 反思页 + 学习页（聚类归并 / 学习路径节点）
+
+**Files:** Modify `app/src/pages/ReflectPage.tsx`、`LearnPage.tsx`；Create `app/src/__tests__/reflect-learn.test.tsx`
+
+> 地基阶段这两页用**模拟数据**展示信息结构（子系统 B/C 接真实数据），验证布局/聚类/路径节点呈现。
+
+- [ ] **Step 1: `app/src/pages/ReflectPage.tsx`**
+```tsx
+const CLUSTERS = [
+  { name: '并发与一致性', count: 3, status: '已调研', tag: '技术' },
+  { name: '汇报表达', count: 2, status: '待调研', tag: '沟通' },
+  { name: '数据库性能', count: 2, status: '已调研', tag: '技术' },
+]
+export function ReflectPage() {
+  return (
+    <div className="p-5 pb-24">
+      <h1 className="font-display text-2xl text-ink">能力反思</h1>
+      <p className="text-xs text-ink2 mt-0.5">随手记下卡点，定期复盘 · 已聚类 3 类</p>
+      <div className="rounded-card p-4 mt-4 border border-line" style={{ background: 'var(--c-card)', borderLeft: '3px solid var(--c-accent)' }}>
+        <p className="text-xs text-ink3">本周提问</p>
+        <p className="text-ink mt-1">哪个瞬间让你觉得能力卡住了？</p>
+        <button className="mt-3 text-[11px] px-3 py-1 rounded-pill text-bg" style={{ background: 'var(--c-accent)' }}>记录一个问题</button>
+      </div>
+      <p className="text-[11px] text-ink3 mt-5">按聚类</p>
+      <div className="mt-2 space-y-2">
+        {CLUSTERS.map((c) => (
+          <div key={c.name} className="rounded-card border border-line p-3.5 flex justify-between" style={{ background: 'var(--c-card)' }}>
+            <div><p className="text-sm text-ink">{c.name}</p><p className="text-[11px] text-ink3 mt-0.5">{c.count} 条 · {c.status}</p></div>
+            <span className="text-[10px] px-2 py-0.5 rounded-pill text-bg self-center" style={{ background: 'var(--c-ink3)' }}>{c.tag}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 2: `app/src/pages/LearnPage.tsx`**
+```tsx
+const NODES = [
+  { n: '01', title: '什么是分布式系统', state: 'done' },
+  { n: '02', title: '一致性模型：强/最终/因果', state: 'doing' },
+  { n: '03', title: '缓存与数据库一致性', state: 'todo' },
+]
+export function LearnPage() {
+  return (
+    <div className="p-5 pb-24">
+      <h1 className="font-display text-2xl text-ink">学习路径</h1>
+      <p className="text-xs text-ink2 mt-0.5">从参考资料生成 · 由浅入深</p>
+      <div className="rounded-card p-4 mt-4 border border-line" style={{ background: 'var(--c-card)' }}>
+        <div className="flex justify-between items-baseline"><p className="text-sm font-bold text-ink">系统设计 · 从浅到深</p><span className="text-[11px] text-ink3">1/3</span></div>
+        <div className="h-1.5 mt-2 rounded-pill" style={{ background: 'var(--c-line)' }}><div className="h-1.5 rounded-pill" style={{ width: '33%', background: 'var(--c-accent)' }} /></div>
+        <ol className="mt-4 space-y-2">
+          {NODES.map((x) => (
+            <li key={x.n} className="flex gap-3 text-sm" style={{ opacity: x.state === 'todo' ? 0.5 : 1 }}>
+              <span className="text-[10px] px-2 py-0.5 rounded-pill" style={{ background: x.state === 'doing' ? 'var(--c-accent)' : 'var(--c-bg2)', color: x.state === 'doing' ? 'var(--c-bg)' : 'var(--c-ink2)' }}>{x.n}</span>
+              <span className={x.state === 'done' ? 'text-ink3 line-through' : 'text-ink'}>{x.title}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+      <button className="mt-3 w-full rounded-pill border border-dashed border-line py-2 text-xs text-ink3">＋ 粘贴参考资料链接，生成路径</button>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 3: 测试 `app/src/__tests__/reflect-learn.test.tsx`**
+```tsx
+import { describe, it, expect } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { ReflectPage } from '../pages/ReflectPage'
+import { LearnPage } from '../pages/LearnPage'
+import { ThemeProvider } from '../themes/ThemeProvider'
+describe('反思/学习页', () => {
+  it('反思页展示聚类', () => { render(<ThemeProvider><ReflectPage /></ThemeProvider>); expect(screen.getByText('并发与一致性')).toBeInTheDocument() })
+  it('学习页展示路径节点', () => { render(<ThemeProvider><LearnPage /></ThemeProvider>); expect(screen.getByText(/一致性模型/)).toBeInTheDocument() })
+})
+```
+
+- [ ] **Step 4: 跑测试 + 提交**：`npx vitest run` → 全绿。
+```bash
+git add app/src/pages/ReflectPage.tsx app/src/pages/LearnPage.tsx app/src/__tests__/reflect-learn.test.tsx
+git commit -m "feat(app): 反思页(聚类)+学习页(路径节点)"
+```
+
+### Task 10′: 设置页（连接 + Agent API + 通知渠道 + 主题切换器）
+
+**Files:** Modify `app/src/pages/SettingsPage.tsx`；Create `app/src/components/ThemeSwitcher.tsx`、`app/src/__tests__/SettingsPage.test.tsx`
+
+- [ ] **Step 1: `app/src/components/ThemeSwitcher.tsx`**（4 主题切换，写 themeStore）
+```tsx
+import { useThemeStore } from '../themes/themeStore'
+import { THEMES, type ThemeId } from '../themes/tokens'
+const IDS: ThemeId[] = ['botanical', 'paper', 'swiss', 'bright']
+export function ThemeSwitcher() {
+  const id = useThemeStore((s) => s.id); const setId = useThemeStore((s) => s.setId)
+  return (
+    <div className="flex flex-wrap gap-2">
+      {IDS.map((tid) => {
+        const t = THEMES[tid]; const on = tid === id
+        return (
+          <button key={tid} onClick={() => setId(tid)} className="rounded-card border p-2 flex items-center gap-2" style={{ borderColor: on ? 'var(--c-accent)' : 'var(--c-line)', background: 'var(--c-card)' }}>
+            <span className="w-4 h-4 rounded-pill" style={{ background: t.accent }} />
+            <span className="text-xs" style={{ color: on ? 'var(--c-accent)' : 'var(--c-ink2)' }}>{t.name}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+```
+
+- [ ] **Step 2: 实装 `app/src/pages/SettingsPage.tsx`**
+```tsx
+import { useState } from 'react'
+import { useAuthStore } from '../store/authStore'
+import { createApiClient } from '../api/client'
+import { ThemeSwitcher } from '../components/ThemeSwitcher'
+export function SettingsPage() {
+  const { baseURL, token, set } = useAuthStore()
+  const [base, setBase] = useState(baseURL); const [tok, setTok] = useState(token); const [msg, setMsg] = useState('')
+  function save() { set(base.trim(), tok.trim()); setMsg('已保存') }
+  async function testConn() {
+    setMsg('连接中…')
+    try { const api = createApiClient({ baseURL: base.trim() || baseURL, token: tok.trim() || token }); await api.get('/api/config'); setMsg('连接成功') }
+    catch (e) { setMsg('连接失败：' + (e as Error).message) }
+  }
+  return (
+    <div className="p-5 pb-24 space-y-4">
+      <h1 className="font-display text-2xl text-ink">设置</h1>
+      <section className="rounded-card border border-line p-4" style={{ background: 'var(--c-card)' }}>
+        <p className="text-xs text-ink3">主题</p>
+        <div className="mt-2"><ThemeSwitcher /></div>
+      </section>
+      <section className="rounded-card border border-line p-4" style={{ background: 'var(--c-card)' }}>
+        <p className="text-xs text-ink3">连接</p>
+        <label className="block mt-2 text-sm"><span className="text-ink3">后端地址</span>
+          <input className="mt-1 w-full bg-transparent border-b border-line text-ink py-1 outline-none" value={base} onChange={(e) => setBase(e.target.value)} /></label>
+        <label className="block mt-2 text-sm"><span className="text-ink3">访问令牌</span>
+          <input type="password" className="mt-1 w-full bg-transparent border-b border-line text-ink py-1 outline-none" value={tok} onChange={(e) => setTok(e.target.value)} /></label>
+        <div className="flex gap-2 mt-3">
+          <button className="rounded-pill px-3 py-1 text-sm text-bg" style={{ background: 'var(--c-accent)' }} onClick={save}>保存</button>
+          <button className="rounded-pill border border-line px-3 py-1 text-sm text-ink2" onClick={testConn}>测试连接</button>
+        </div>
+        {msg && <p className="text-xs text-ink3 mt-2">{msg}</p>}
+      </section>
+      <section className="rounded-card border border-line p-4 text-sm space-y-2" style={{ background: 'var(--c-card)' }}>
+        <p className="text-xs text-ink3">AI 能力 / 通知渠道</p>
+        <div className="flex justify-between"><span className="text-ink">任务解析 API</span><span className="text-xs text-done">● 已配</span></div>
+        <div className="flex justify-between"><span className="text-ink">编排 API</span><span className="text-xs text-ink3">○ 未配</span></div>
+        <div className="flex justify-between"><span className="text-ink">邮件提醒</span><span className="text-xs text-ink3">○ 未配</span></div>
+      </section>
+      <p className="text-[11px] text-ink3 text-center">密钥仅存本地 · 不入库不上传</p>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 3: 测试 `app/src/__tests__/SettingsPage.test.tsx`**（保存 + 主题切换）
+```tsx
+import { describe, it, expect, beforeEach } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { SettingsPage } from '../pages/SettingsPage'
+import { useAuthStore } from '../store/authStore'
+import { useThemeStore } from '../themes/themeStore'
+import { ThemeProvider } from '../themes/ThemeProvider'
+beforeEach(() => { localStorage.clear(); useAuthStore.setState({ baseURL: 'http://localhost:8000', token: '' }); useThemeStore.setState({ id: 'botanical' }) })
+describe('SettingsPage', () => {
+  it('保存连接信息', async () => {
+    render(<ThemeProvider><SettingsPage /></ThemeProvider>)
+    await userEvent.type(screen.getByLabelText('访问令牌'), 'tok-xyz') // label 包裹 input → getByLabelText
+    await userEvent.click(screen.getByRole('button', { name: '保存' }))
+    expect(useAuthStore.getState().token).toBe('tok-xyz')
+  })
+  it('切换主题', async () => {
+    render(<ThemeProvider><SettingsPage /></ThemeProvider>)
+    await userEvent.click(screen.getByText('纸本日记'))
+    expect(useThemeStore.getState().id).toBe('paper')
+  })
+})
+```
+
+- [ ] **Step 4: 跑测试 + 提交**：`npx vitest run` → 全绿。
+```bash
+git add app/src/components/ThemeSwitcher.tsx app/src/pages/SettingsPage.tsx app/src/__tests__/SettingsPage.test.tsx
+git commit -m "feat(app): 设置页(连接/Agent/通知+主题切换器)"
+```
+
+---
+
 ## 自检（Self-Review 结果）
 
-- **Spec 覆盖**：规格第 6 目录结构(app/)→ 各 Task；第 7.1 设备端 tasks 表(user_id)→ Task 2/9；第 10 定向同步(带提醒上行)→ Task 4；第 12 单用户认证(令牌)→ Task 5/8；第 15 验收"Capacitor 外壳三模块导航/设备 SQLite 离线 CRUD/设置页配密钥"→ Task 6/7/8/9；端到端"建带提醒任务→同步→后端入队"→ Task 11。✅（注：第 15 "真机移动端"与"调研结果下行"留待子系统 B/C 与真机阶段。）
-- **占位符**：Task 2 的 `title()` 辅助已改为直接断言；无其他 TBD/TODO。SqliteTaskRepository 为有意 stub（原生阶段补全，已记进度）。✅
-- **类型一致性**：`Task`/`TaskStatus`/`Urgency`/`SyncState`、`TaskRepository` 方法、`ApiClient.get/post/put/del`、`createSyncService`/`pushReminders` 在各 Task 间一致。✅
-- **范围**：本计划=前端地基，可独立测试（Vitest）+ 浏览器可跑。子系统 A（拖拽看板/多粒度视图/AI 录入解析）为后续。✅
+- **Spec 覆盖**：规格第 6 目录结构(app/)→ 各 Task；第 7.1 设备端 tasks 表(user_id)→ Task 2 + 原 Task 9(Capacitor)；第 10 定向同步(带提醒上行)→ Task 4；第 12 单用户认证(令牌)→ Task 5 + Task 10′(设置页)；第 15 验收"Capacitor 外壳三模块导航/设备 SQLite 离线 CRUD/设置页配密钥"→ Task 7′/8′/9′/10′ + 原 Task 9；端到端"建带提醒任务→同步→后端入队"→ 原 Task 11。✅（注：第 15 "真机移动端"与"调研结果下行"留待子系统 B/C 与真机阶段。）
+- **v2 主题化（ADR-011）覆盖**：4 皮肤 token + themeStore + ThemeProvider + CSS 变量映射 → Task 6′；设置页主题切换器 → Task 10′；组件全程用语义色（bg/ink/accent…）+ variant 小差异 → Task 7′-10′。切换主题零布局跳动（仅换 CSS 变量）。默认 botanical。✅
+- **占位符**：Task 2 的 `title()` 辅助已改为直接断言；无其他 TBD/TODO。SqliteTaskRepository 为有意 stub（原生阶段补全，已记进度）。ReflectPage/LearnPage 地基阶段用模拟数据（子系统 B/C 接真实数据），已注明。✅
+- **类型一致性**：`Task`/`TaskStatus`/`Urgency`/`SyncState`、`TaskRepository` 方法、`ApiClient.get/post/put/del`、`createSyncService`/`pushReminders`、`ThemeId`/`ThemeTokens`/`Variant`、`taskViews`（withinRange/groupByDay/weeklyTrend）在各 Task 间一致。✅
+- **范围**：本计划=前端地基（逻辑层 + 主题化 UI 层），可独立测试（Vitest）+ 浏览器可跑 + 4 主题可切。子系统 A（拖拽看板/多粒度视图/AI 录入解析/真机 SQLite 实现）为后续。✅
+- **执行顺序**：Task 1-5（逻辑）→ Task 6′-10′（主题化 UI）→ 原 Task 9/10/11（Capacitor/启动/联调，编号作 11/12/13）。
