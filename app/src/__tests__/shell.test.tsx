@@ -18,6 +18,6 @@ describe('外壳', () => {
   it('路由渲染反思页', () => {
     const { container } = renderAt('/reflect')
     const main = container.querySelector('main')!
-    expect(within(main).getByText('反思')).toBeInTheDocument()
+    expect(within(main).getByText('能力反思')).toBeInTheDocument()
   })
 })
