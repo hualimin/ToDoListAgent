@@ -29,7 +29,7 @@ app = FastAPI(title="ToDoListAgent Server", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,  # Bearer 令牌鉴权（非 Cookie），凭据模式须为 False
     allow_methods=["*"],
     allow_headers=["*"],
 )
