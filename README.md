@@ -27,3 +27,24 @@
 
 ## 开发流程
 image2 原型图 → image2 透明素材 → codex 拆组件逐一生成 → Figma 组装（前端 → 后台）。
+
+## 后端运行（server/）
+
+```bash
+cd server
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+
+# 1) 配置密钥（首次）：复制模板并编辑填入你的 API Key / SMTP / 访问令牌
+cp ../config/secrets.example.json ../config/secrets.local.json
+#   编辑 ../config/secrets.local.json（已被 .gitignore 排除，绝不提交）
+
+# 2) 数据库迁移
+alembic upgrade head
+
+# 3) 启动服务（开发模式）
+DISABLE_SCHEDULER=0 uvicorn app.main:app --reload --port 8000
+#   生产：去掉 --reload；默认会启动后台调度器（每 30s 扫描到期提醒并派发）
+```
+
+测试（在 `server/` 下）：`pytest -v`。
