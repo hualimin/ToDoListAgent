@@ -63,3 +63,31 @@ def test_list_and_delete(client):
 
 def test_requires_auth(client):
     assert client.post("/api/reminders", json=_body()).status_code == 401
+
+
+def test_invalid_channel_rejected(client):
+    r = client.post("/api/reminders", headers=HDR, json={**_body(), "channels": ["emial"]})
+    assert r.status_code == 422
+
+
+def test_upsert_rearms_after_fired(client):
+    # 先建一条
+    client.post("/api/reminders", headers=HDR, json=_body(ref="r"))
+    # 直接把它改成 fired/dead 状态（模拟已派发过）
+    from app import db as dbmod
+    from app.models import ReminderQueueEntry
+    with dbmod.SessionLocal() as s:
+        row = s.query(ReminderQueueEntry).filter_by(task_ref="r").one()
+        row.status = "dead"
+        row.attempts = 3
+        row.last_error = "boom"
+        s.commit()
+    # 重新 upsert 同一 task_ref → 应回到 pending、attempts=0、last_error=None
+    client.post("/api/reminders", headers=HDR, json=_body(ref="r"))
+    got = client.get("/api/reminders", headers=HDR).json()
+    assert len(got) == 1
+    assert got[0]["status"] == "pending"
+    with dbmod.SessionLocal() as s:
+        row = s.query(ReminderQueueEntry).filter_by(task_ref="r").one()
+        assert row.attempts == 0
+        assert row.last_error is None

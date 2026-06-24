@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -14,6 +14,7 @@ class User(Base):
 
 class ReminderQueueEntry(Base):
     __tablename__ = "reminder_queue"
+    __table_args__ = (UniqueConstraint("user_id", "task_ref", name="uq_reminder_user_taskref"),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer, index=True, default=1)
     task_ref: Mapped[str] = mapped_column(String, index=True)   # 客户端 task.id，幂等键
