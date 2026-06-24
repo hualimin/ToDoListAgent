@@ -969,9 +969,10 @@ def client(monkeypatch, tmp_path):
     sp = tmp_path / "secrets.local.json"
     monkeypatch.setattr(config, "SECRETS_PATH", sp)
     save_secrets(SecretsFile(auth={"access_token": "tok"}, agents={}, notifications={}))
-    # 独立 DB（每个测试隔离）
-    dbp = tmp_path / "t.db"
-    monkeypatch.setattr(config, "DB_PATH", dbp)
+    # 独立 DB（每个测试隔离）：用 configure_engine 重绑 engine/SessionLocal
+    # （不能只 monkeypatch config.DB_PATH——engine 在 import 时已绑定）
+    from app.db import configure_engine
+    configure_engine(tmp_path / "t.db")
     Base.metadata.create_all(bind=engine)
     return TestClient(app)
 
