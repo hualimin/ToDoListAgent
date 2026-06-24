@@ -29,7 +29,7 @@ def test_call_uses_openai_compatible_endpoint(monkeypatch, tmp_path):
         captured["url"] = url
         captured["headers"] = headers
         captured["json"] = json
-        return httpx.Response(200, json={"choices": [{"message": {"content": "PARSED"}}]})
+        return httpx.Response(200, request=httpx.Request("POST", url), json={"choices": [{"message": {"content": "PARSED"}}]})
 
     monkeypatch.setattr(httpx, "post", fake_post)
     result = call_agent("task_parse", "帮我解析：明天买牛奶")
@@ -38,3 +38,17 @@ def test_call_uses_openai_compatible_endpoint(monkeypatch, tmp_path):
     assert captured["headers"]["Authorization"] == "Bearer sk-test"
     assert captured["json"]["model"] == "gpt-4o-mini"
     assert captured["json"]["messages"][0]["content"] == "帮我解析：明天买牛奶"
+
+
+def test_http_error_propagates(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path, agents={
+        "task_parse": {"provider": "openai", "base_url": "https://api.openai.com/v1",
+                       "model": "gpt-4o-mini", "api_key": "sk-test"}})
+
+    def fake_post(url, *, headers, json, timeout):
+        return httpx.Response(500, request=httpx.Request("POST", url), text="boom")
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    import httpx as _httpx
+    with pytest.raises(_httpx.HTTPStatusError):
+        call_agent("task_parse", "hi")
