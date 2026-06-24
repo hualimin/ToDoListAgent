@@ -1,17 +1,18 @@
 import type { TaskRepository } from './TaskRepository'
 import type { Task, TaskCreateInput, TaskPatch } from './types'
 
-let counter = 0
-function uid(): string {
-  counter += 1
-  return `t-${Date.now().toString(36)}-${counter}`
-}
 function now(): string {
   return new Date().toISOString()
 }
 
 export class InMemoryTaskRepository implements TaskRepository {
   private items = new Map<string, Task>()
+  private seq = 0
+
+  private uid(): string {
+    this.seq += 1
+    return `t-${Date.now().toString(36)}-${this.seq}`
+  }
 
   async getAll(): Promise<Task[]> {
     return [...this.items.values()]
@@ -25,7 +26,7 @@ export class InMemoryTaskRepository implements TaskRepository {
 
   async create(input: TaskCreateInput): Promise<Task> {
     const t: Task = {
-      id: uid(),
+      id: this.uid(),
       user_id: 1,
       title: input.title,
       content: input.content ?? '',
@@ -54,7 +55,7 @@ export class InMemoryTaskRepository implements TaskRepository {
       user_id: cur.user_id,
       created_at: cur.created_at,
       updated_at: now(),
-      sync_state: 'pending_up',
+      sync_state: patch.sync_state ?? 'pending_up',
     }
     this.items.set(id, updated)
     return updated

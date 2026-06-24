@@ -37,4 +37,20 @@ describe('InMemoryTaskRepository', () => {
     const pending = await repo.getPendingUp()
     expect(pending.map((t) => t.title)).toEqual(['改名'])
   })
+
+  it('update 尊重显式传入的 sync_state(供同步置 clean)', async () => {
+    const t = await repo.create({ title: 'x', due_at: '2026-07-01T09:00:00Z' })
+    const r = await repo.update(t.id, { sync_state: 'clean' })
+    expect(r.sync_state).toBe('clean')
+  })
+
+  it('update 不存在的 id 抛错', async () => {
+    await expect(repo.update('nope', { title: 'x' })).rejects.toThrow()
+  })
+
+  it('getById 命中与缺失', async () => {
+    const t = await repo.create({ title: 'a' })
+    expect((await repo.getById(t.id))?.title).toBe('a')
+    expect(await repo.getById('missing')).toBeNull()
+  })
 })
