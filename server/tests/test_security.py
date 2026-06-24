@@ -39,3 +39,10 @@ def test_correct_token_returns_user_id(seeded_secrets):
     resp = client.get("/protected", headers={"Authorization": "Bearer tok-xyz"})
     assert resp.status_code == 200
     assert resp.json() == {"user_id": 1}
+
+
+def test_unconfigured_returns_500(monkeypatch):
+    from app import security
+    monkeypatch.setattr(security, "get_access_token", lambda: None)
+    client = TestClient(_make_app())
+    assert client.get("/protected", headers={"Authorization": "Bearer anything"}).status_code == 500

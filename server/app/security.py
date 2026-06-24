@@ -12,6 +12,7 @@ def require_user(authorization: str | None = Header(default=None)) -> int:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="缺少 Bearer 令牌")
     token = authorization.removeprefix("Bearer ").strip()
+    # 单用户本地令牌，无需 constant-time 比较（非多用户/网络暴露场景）
     if token != expected:
         raise HTTPException(status_code=401, detail="令牌无效")
     return DEFAULT_USER_ID
