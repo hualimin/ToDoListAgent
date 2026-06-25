@@ -48,3 +48,15 @@ DISABLE_SCHEDULER=0 uvicorn app.main:app --reload --port 8000
 ```
 
 测试（在 `server/` 下）：`pytest -v`。
+
+## 前端运行（app/）
+
+```bash
+cd app
+npm install
+npm run dev          # 浏览器开发，默认 http://localhost:5173
+npm run build        # 生产构建 → dist/（供 Capacitor 打包）
+npm test             # Vitest 单测
+```
+首次使用：打开 App「设置」页，填后端地址与访问令牌（与后端 secrets.local.json 的 access_token 一致），并可在「主题」切换 4 套皮肤。
+默认主题：自然手作。原生打包（Android/iOS）：`npx cap add android` / `npx cap add ios` 后 `npx cap sync`（原生 SQLite 实现待真机阶段补全）。

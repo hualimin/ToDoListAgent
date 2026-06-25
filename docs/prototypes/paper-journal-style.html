@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ToDoListAgent · 纸本日记 风格原型</title>
+
+<!-- 字体：霞鹜文楷(中文楷) + Newsreader(拉丁衬线) -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-screen-webfont@1.7.0/style.css" rel="stylesheet" />
+
+<!-- Tailwind Play CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          paper:   '#F6EFE1',  // 暖米白纸
+          paper2:  '#FCF8EF',  // 浅纸
+          card:    '#FBF6EA',
+          ink:     '#24211C',  // 墨黑
+          ink2:    '#6E6557',  // 次墨
+          ink3:    '#A89F8E',  // 淡墨
+          line:    '#E3D9C4',  // 纸线
+          seal:    '#B23A2D',  // 朱砂
+          sealbg:  '#E7C9C2',
+          amber2:  '#A9791C',  // 延期·琥珀
+          jade:    '#4E6E54',  // 完成·黛绿
+        },
+        fontFamily: {
+          serif: ['Newsreader', 'LXGW WenKai Screen', 'serif'],
+          kai:   ['LXGW WenKai Screen', 'Newsreader', 'serif'],
+        },
+      },
+    },
+  }
+</script>
+
+<style>
+  :root { color-scheme: light; }
+  html, body { background: #ece3d0; }
+  body { font-family: 'LXGW WenKai Screen', 'Newsreader', serif; color: #24211C; }
+
+  /* 纸张颗粒纹理 */
+  .grain::before {
+    content: ""; position: fixed; inset: 0; z-index: 50; pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+    opacity: .05; mix-blend-mode: multiply;
+  }
+
+  /* 手机外框 */
+  .phone {
+    width: 372px; height: 760px; border-radius: 44px;
+    background: #24211C; padding: 12px;
+    box-shadow: 0 30px 60px -20px rgba(36,33,28,.45), 0 0 0 2px rgba(0,0,0,.2);
+  }
+  .screen {
+    width: 100%; height: 100%; border-radius: 34px; overflow: hidden;
+    background: #F6EFE1; position: relative; display: flex; flex-direction: column;
+  }
+  .scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .scroll::-webkit-scrollbar { width: 0; }
+
+  /* 印章 */
+  .stamp {
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1.5px solid #B23A2D; color: #B23A2D; border-radius: 7px;
+    font-size: 11px; padding: 1px 7px; letter-spacing: .05em;
+    background: rgba(178,58,45,.05);
+  }
+  .seal-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* 卡片 */
+  .papercard {
+    background: #FBF6EA; border: 1px solid #E3D9C4; border-radius: 14px;
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .papercard:hover { transform: translateY(-1px); box-shadow: 0 6px 18px -10px rgba(36,33,28,.35); }
+
+  /* 底部导航 */
+  .navbtn { transition: color .18s ease; }
+  .navbtn.active { color: #B23A2D; }
+  .navbtn.active .navico { background: #B23A2D; color: #FCF8EF; }
+
+  /* 屏幕切换 */
+  .screen-panel { display: none; }
+  .screen-panel.active { display: block; animation: rise .32s cubic-bezier(.2,.7,.2,1); }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  /* 进行中脉动 */
+  .pulse { animation: pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
+
+  .ruled { background-image: linear-gradient(#E3D9C4 1px, transparent 1px); background-size: 100% 30px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pulse, .screen-panel.active { animation: none !important; }
+    .papercard:hover { transform: none; }
+  }
+
+  /* 设计说明卡 */
+  .swatch { width: 26px; height: 26px; border-radius: 7px; border: 1px solid rgba(0,0,0,.12); }
+</style>
+</head>
+
+<body class="grain min-h-screen">
+
+<div class="mx-auto max-w-6xl px-6 py-8">
+
+  <!-- 顶部说明 -->
+  <header class="mb-8">
+    <div class="flex items-end justify-between flex-wrap gap-4">
+      <div>
+        <p class="text-ink2 text-sm tracking-wide">ToDoListAgent · 移动端风格原型</p>
+        <h1 class="font-serif text-4xl text-ink mt-1" style="letter-spacing:-.01em;">纸本日记 <span class="text-seal">·</span> Paper Journal</h1>
+        <p class="text-ink2 mt-2 max-w-xl leading-relaxed">暖米白纸底 + 颗粒纹理 + 墨色细线，配霞鹜文楷与朱砂点睛。沉静、专注，像一本随手记的手账——契合「待办 / 反思 / 学习」这种需要沉下心的工具。</p>
+      </div>
+      <!-- 调色板与字体 -->
+      <div class="papercard p-4 text-xs text-ink2" style="min-width:230px;">
+        <p class="text-ink font-serif text-sm mb-2">设计系统</p>
+        <div class="flex gap-2 mb-3">
+          <div class="swatch" style="background:#F6EFE1" title="纸 #F6EFE1"></div>
+          <div class="swatch" style="background:#24211C" title="墨 #24211C"></div>
+          <div class="swatch" style="background:#B23A2D" title="朱砂 #B23A2D"></div>
+          <div class="swatch" style="background:#4E6E54" title="黛绿 #4E6E54"></div>
+          <div class="swatch" style="background:#A9791C" title="琥珀 #A9791C"></div>
+        </div>
+        <p>字体：霞鹜文楷 / Newsreader</p>
+        <p>圆角 14px · 细线 1px · 无重阴影</p>
+      </div>
+    </div>
+    <p class="text-ink3 text-xs mt-3">提示：点手机底部导航切换「待办 / 反思 / 学习 / 设置」四屏。</p>
+  </header>
+
+  <!-- 手机原型 -->
+  <div class="flex flex-wrap items-start gap-10">
+    <div class="phone">
+      <div class="screen">
+        <!-- 状态栏 -->
+        <div class="flex items-center justify-between px-6 pt-3 pb-1 text-[11px] text-ink2">
+          <span class="font-serif">9:24</span>
+          <span class="flex gap-1 items-center">
+            <span class="seal-dot" style="background:#24211C; opacity:.6"></span>
+            <span class="seal-dot" style="background:#24211C; opacity:.4; width:6px; height:6px"></span>
+          </span>
+        </div>
+
+        <!-- 屏幕区 -->
+        <div class="scroll flex-1 px-5 pb-24">
+
+          <!-- ===== 待办 ===== -->
+          <section class="screen-panel active" data-screen="tasks">
+            <p class="text-ink3 text-xs mt-3 font-serif italic">2026 年 6 月 24 日 · 周三</p>
+            <h2 class="font-serif text-3xl text-ink" style="letter-spacing:-.01em;">今日待办</h2>
+            <p class="text-ink2 text-sm mt-1">共 5 件 · 进行中 2 · 已完成 1</p>
+
+            <div class="flex gap-2 mt-4 text-xs">
+              <span class="stamp" style="border-color:#B23A2D;color:#B23A2D">今日</span>
+              <span class="stamp" style="border-color:#A89F8E;color:#6E6557;background:transparent">本周</span>
+              <span class="stamp" style="border-color:#A89F8E;color:#6E6557;background:transparent">全部</span>
+            </div>
+
+            <div class="mt-4 space-y-3">
+              <!-- 紧急·待办 -->
+              <div class="papercard p-3.5 flex gap-3" style="border-left:3px solid #B23A2D">
+                <span class="seal-dot mt-1.5" style="background:#B23A2D"></span>
+                <div class="flex-1">
+                  <p class="text-ink">回复张工关于交付时间的邮件</p>
+                  <p class="text-ink3 text-xs mt-1 font-serif">紧急 · 今天 15:00</p>
+                </div>
+                <span class="stamp" style="border-color:#A89F8E;color:#6E6557;background:transparent">待办</span>
+              </div>
+              <!-- 进行中 -->
+              <div class="papercard p-3.5 flex gap-3">
+                <span class="seal-dot pulse mt-1.5" style="background:#B23A2D"></span>
+                <div class="flex-1">
+                  <p class="text-ink">整理本周项目复盘笔记</p>
+                  <p class="text-ink3 text-xs mt-1 font-serif">普通 · 建议今天完成</p>
+                </div>
+                <span class="stamp" style="border-color:#B23A2D;color:#B23A2D">进行中</span>
+              </div>
+              <!-- 高·待办 -->
+              <div class="papercard p-3.5 flex gap-3" style="border-left:3px solid #A9791C">
+                <span class="seal-dot mt-1.5" style="background:#A9791C"></span>
+                <div class="flex-1">
+                  <p class="text-ink">订妈妈的生日蛋糕</p>
+                  <p class="text-ink3 text-xs mt-1 font-serif">高 · 今天</p>
+                </div>
+                <span class="stamp" style="border-color:#A89F8E;color:#6E6557;background:transparent">待办</span>
+              </div>
+              <!-- 完成 -->
+              <div class="papercard p-3.5 flex gap-3 opacity-70">
+                <span class="seal-dot mt-1.5" style="background:#4E6E54"></span>
+                <div class="flex-1">
+                  <p class="text-ink line-through decoration-1">看完《深度工作》第 3 章</p>
+                  <p class="text-ink3 text-xs mt-1 font-serif">已完成</p>
+                </div>
+              </div>
+              <!-- 延期 -->
+              <div class="papercard p-3.5 flex gap-3">
+                <span class="seal-dot mt-1.5" style="background:#A9791C"></span>
+                <div class="flex-1">
+                  <p class="text-ink">预约牙医洗牙</p>
+                  <p class="text-ink3 text-xs mt-1 font-serif">已延期两次 · 建议本周</p>
+                </div>
+                <span class="stamp" style="border-color:#A9791C;color:#A9791C;background:transparent">延期</span>
+              </div>
+            </div>
+
+            <!-- 记一笔 -->
+            <button class="mt-4 w-full papercard p-3 text-ink3 text-sm" style="border-style:dashed">＋ 记一笔待办…（语音 / 文字 / 拍照）</button>
+          </section>
+
+          <!-- ===== 反思 ===== -->
+          <section class="screen-panel" data-screen="reflect">
+            <p class="text-ink3 text-xs mt-3 font-serif italic">元认知 · 细小问题</p>
+            <h2 class="font-serif text-3xl text-ink" style="letter-spacing:-.01em;">能力反思</h2>
+            <p class="text-ink2 text-sm mt-1">随手记下卡点，定期复盘 · 已聚类 5 类</p>
+
+            <!-- 提问卡 -->
+            <div class="papercard p-4 mt-4" style="border-left:3px solid #B23A2D">
+              <p class="text-ink2 text-xs font-serif italic">本周提问</p>
+              <p class="text-ink mt-1 leading-relaxed">哪个瞬间让你觉得能力卡住了？</p>
+              <button class="mt-3 stamp" style="border-color:#B23A2D;color:#FCF8EF;background:#B23A2D">记录一个问题</button>
+            </div>
+
+            <p class="text-ink3 text-xs mt-5 font-serif">最近记录</p>
+            <div class="mt-2 space-y-3">
+              <div class="papercard p-3.5">
+                <p class="text-ink text-sm">并发场景下锁的选型总拿不准</p>
+                <p class="text-ink3 text-xs mt-1 font-serif">技术 · 已归入「并发与一致性」聚类（3 条）</p>
+              </div>
+              <div class="papercard p-3.5">
+                <p class="text-ink text-sm">向上汇报时总抓不住重点</p>
+                <p class="text-ink3 text-xs mt-1 font-serif">沟通 · 待调研</p>
+              </div>
+              <div class="papercard p-3.5">
+                <p class="text-ink text-sm">SQL 慢查询不知道从哪优化</p>
+                <p class="text-ink3 text-xs mt-1 font-serif">技术 · 已归入「数据库性能」聚类（2 条）</p>
+              </div>
+            </div>
+
+            <!-- 后台调研提示 -->
+            <div class="papercard p-4 mt-5 ruled" style="background:#FCF8EF">
+              <p class="text-ink2 text-xs font-serif italic">周末提醒</p>
+              <p class="text-ink mt-1 text-sm leading-relaxed">后台已为 2 个问题整理好学习资料（由易到难）。</p>
+              <span class="stamp mt-2 inline-flex" style="border-color:#B23A2D;color:#B23A2D">查看资料 →</span>
+            </div>
+          </section>
+
+          <!-- ===== 学习 ===== -->
+          <section class="screen-panel" data-screen="learn">
+            <p class="text-ink3 text-xs mt-3 font-serif italic">元认知 · 主动学习</p>
+            <h2 class="font-serif text-3xl text-ink" style="letter-spacing:-.01em;">学习路径</h2>
+            <p class="text-ink2 text-sm mt-1">从参考资料生成 · 由浅入深</p>
+
+            <!-- 学习路径卡 -->
+            <div class="papercard p-4 mt-4">
+              <div class="flex items-baseline justify-between">
+                <p class="font-serif text-lg text-ink">系统设计 · 从浅到深</p>
+                <span class="text-ink3 text-xs font-serif">3 / 8</span>
+              </div>
+              <div class="h-1.5 rounded-full mt-2" style="background:#E3D9C4">
+                <div class="h-1.5 rounded-full" style="width:37%;background:#B23A2D"></div>
+              </div>
+
+              <ol class="mt-4 space-y-3">
+                <li class="flex gap-3">
+                  <span class="stamp" style="border-color:#4E6E54;color:#4E6E54">基础</span>
+                  <div class="flex-1">
+                    <p class="text-ink text-sm">什么是分布式系统</p>
+                    <p class="text-ink3 text-xs font-serif italic">例：用快递分拣中心理解「节点与通信」</p>
+                  </div>
+                </li>
+                <li class="flex gap-3">
+                  <span class="stamp" style="border-color:#B23A2D;color:#B23A2D">进行</span>
+                  <div class="flex-1">
+                    <p class="text-ink text-sm">一致性模型：强 / 最终 / 因果</p>
+                    <p class="text-ink3 text-xs font-serif italic">例：从「转账」看强一致的代价</p>
+                  </div>
+                </li>
+                <li class="flex gap-3 opacity-60">
+                  <span class="stamp" style="border-color:#A89F8E;color:#6E6557;background:transparent">待学</span>
+                  <div class="flex-1">
+                    <p class="text-ink text-sm">缓存与数据库一致性</p>
+                    <p class="text-ink3 text-xs font-serif italic">例：为什么「先更新库再删缓存」</p>
+                  </div>
+                </li>
+              </ol>
+            </div>
+
+            <button class="mt-4 w-full papercard p-3 text-ink3 text-sm" style="border-style:dashed">＋ 粘贴参考资料链接，生成路径…</button>
+          </section>
+
+          <!-- ===== 设置 ===== -->
+          <section class="screen-panel" data-screen="settings">
+            <p class="text-ink3 text-xs mt-3 font-serif italic">连接与配置</p>
+            <h2 class="font-serif text-3xl text-ink" style="letter-spacing:-.01em;">设置</h2>
+
+            <div class="mt-4 space-y-4">
+              <!-- 连接 -->
+              <div class="papercard p-4">
+                <p class="text-ink2 text-xs font-serif">连接</p>
+                <label class="block mt-2 text-sm">
+                  <span class="text-ink3">后端地址</span>
+                  <input class="mt-1 w-full bg-transparent border-b border-line text-ink py-1 outline-none focus:border-seal" value="http://192.168.1.5:8000" />
+                </label>
+                <label class="block mt-2 text-sm">
+                  <span class="text-ink3">访问令牌</span>
+                  <input type="password" class="mt-1 w-full bg-transparent border-b border-line text-ink py-1 outline-none focus:border-seal" value="devtoken123" />
+                </label>
+              </div>
+
+              <!-- AI 能力 -->
+              <div class="papercard p-4">
+                <p class="text-ink2 text-xs font-serif">AI 能力（各功能独立配置 API）</p>
+                <div class="mt-2 space-y-2 text-sm">
+                  <div class="flex justify-between"><span class="text-ink">任务解析 task_parse</span><span class="stamp" style="border-color:#4E6E54;color:#4E6E54">已配 sk···</span></div>
+                  <div class="flex justify-between"><span class="text-ink">紧急度判定 urgency_rank</span><span class="stamp" style="border-color:#4E6E54;color:#4E6E54">已配 sk···</span></div>
+                  <div class="flex justify-between"><span class="text-ink">智能编排 schedule_arrange</span><span class="stamp" style="border-color:#A89F8E;color:#6E6557;background:transparent">未配</span></div>
+                </div>
+              </div>
+
+              <!-- 通知 -->
+              <div class="papercard p-4">
+                <p class="text-ink2 text-xs font-serif">提醒渠道（App 内默认，其余手动配）</p>
+                <div class="mt-2 space-y-2 text-sm">
+                  <div class="flex justify-between items-center"><span class="text-ink">App 内消息</span><span class="stamp" style="border-color:#B23A2D;color:#B23A2D">开</span></div>
+                  <div class="flex justify-between items-center"><span class="text-ink">邮件 SMTP</span><span class="stamp" style="border-color:#A89F8E;color:#6E6557;background:transparent">未配</span></div>
+                  <div class="flex justify-between items-center"><span class="text-ink">Webhook（Bark）</span><span class="stamp" style="border-color:#A89F8E;color:#6E6557;background:transparent">未配</span></div>
+                </div>
+              </div>
+              <p class="text-ink3 text-xs text-center pb-2 font-serif italic">密钥仅存本地，绝不进库 / 不上传</p>
+            </div>
+          </section>
+
+        </div>
+
+        <!-- 底部导航 -->
+        <nav class="absolute bottom-0 inset-x-0 flex border-t border-line bg-paper2/95 backdrop-blur">
+          <button class="navbtn active flex-1 py-3 flex flex-col items-center gap-1 text-xs" data-target="tasks">
+            <span class="navico w-7 h-7 rounded-lg flex items-center justify-center text-[13px]" style="background:rgba(178,58,45,.12)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+            </span>待办
+          </button>
+          <button class="navbtn flex-1 py-3 flex flex-col items-center gap-1 text-xs text-ink2" data-target="reflect">
+            <span class="navico w-7 h-7 rounded-lg flex items-center justify-center text-[13px]">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 1 4 10.5V16H8v-2.5A6 6 0 0 1 12 3Z"/><path d="M9 20h6"/></svg>
+            </span>反思
+          </button>
+          <button class="navbtn flex-1 py-3 flex flex-col items-center gap-1 text-xs text-ink2" data-target="learn">
+            <span class="navico w-7 h-7 rounded-lg flex items-center justify-center text-[13px]">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V6a1 1 0 0 1 1-1h6v15"/><path d="M20 19V6a1 1 0 0 0-1-1h-6v15"/><path d="M2 19h20"/></svg>
+            </span>学习
+          </button>
+          <button class="navbtn flex-1 py-3 flex flex-col items-center gap-1 text-xs text-ink2" data-target="settings">
+            <span class="navico w-7 h-7 rounded-lg flex items-center justify-center text-[13px]">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1L14.5 2h-5l-.4 2.6a7 7 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.4 2.6h5l.4-2.6a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5c.06-.33.1-.66.1-1Z"/></svg>
+            </span>设置
+          </button>
+        </nav>
+      </div>
+    </div>
+
+    <!-- 右侧设计注解 -->
+    <aside class="max-w-xs text-sm text-ink2 leading-relaxed space-y-4 pt-2">
+      <div>
+        <p class="text-ink font-serif text-base">为什么是「纸本日记」</p>
+        <p class="mt-1">待办要快记、反思要慢想、学习要沉读——三种节奏共用一种「沉静纸感」最统一。朱砂红只用在「进行中 / 紧急 / 主行动」上，强引导视觉焦点。</p>
+      </div>
+      <div>
+        <p class="text-ink font-serif text-base">状态如何表达</p>
+        <p class="mt-1">用墨色细线 + 小色点 + 印章式标签，而不是大色块。紧急=朱砂、延期=琥珀、完成=黛绿（删除线），克制不花。</p>
+      </div>
+      <div>
+        <p class="text-ink font-serif text-base">字体</p>
+        <p class="mt-1">霞鹜文楷（中文楷体，手账感）+ Newsreader（拉丁衬线，数字日期更精致）。刻意不用 Inter 等通用字。</p>
+      </div>
+      <p class="text-ink3 text-xs pt-2 border-t border-line">这是风格原型，非最终功能稿。看方向对不对，再按你的 5 个原型合稿。</p>
+    </aside>
+  </div>
+</div>
+
+<script>
+  const nav = document.querySelectorAll('.navbtn');
+  const panels = document.querySelectorAll('.screen-panel');
+  nav.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const t = btn.dataset.target;
+      nav.forEach(b => {
+        const on = b === btn;
+        b.classList.toggle('active', on);
+        b.classList.toggle('text-ink2', !on);
+        const ico = b.querySelector('.navico');
+        ico.style.background = on ? 'rgba(178,58,45,.12)' : 'transparent';
+      });
+      panels.forEach(p => p.classList.toggle('active', p.dataset.screen === t));
+      document.querySelector('.scroll').scrollTop = 0;
+    });
+  });
+</script>
+</body>
+</html>
