@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>子系统A2 · 看板+月历 v3</title>
+<style>
+  :root{
+    --bg:#F5F1E8; --card:#FBF8F0; --ink:#2E3A2E; --ink2:#5E6B58; --ink3:#9AA28E;
+    --line:#E2DAC4; --accent:#6B8E5A; --urgent:#C17A54; --high:#D4B063;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;background:#E8E0CC;color:var(--ink);}
+  .wrap{max-width:1080px;margin:0 auto;padding:24px;}
+  h1{font-size:20px;margin:0 0 4px;}
+  .lead{font-size:13px;color:var(--ink2);margin:0 0 18px;line-height:1.6;}
+  .stage{position:relative;background:var(--bg);border:1px solid var(--line);border-radius:24px;
+         box-shadow:0 20px 50px -20px rgba(0,0,0,.25);overflow:hidden;height:720px;display:flex;flex-direction:column;}
+  .viewswitch{position:absolute;top:12px;right:12px;display:flex;gap:6px;z-index:5;background:var(--card);
+              border:1px solid var(--line);border-radius:999px;padding:4px;box-shadow:0 4px 10px -4px rgba(0,0,0,.2);}
+  .viewswitch button{width:34px;height:34px;border-radius:999px;border:0;background:transparent;cursor:pointer;
+                     display:flex;align-items:center;justify-content:center;color:var(--ink2);}
+  .viewswitch button.on{background:var(--accent);color:#fff;}
+  .viewswitch svg{width:18px;height:18px;}
+  .titlebar{padding:16px 18px 6px;display:flex;align-items:center;justify-content:space-between;}
+  .titlebar h2{margin:0;font-size:16px;}
+  .titlebar p{margin:0;font-size:11px;color:var(--ink3);}
+  .monthnav{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink2);}
+  .monthnav button{width:28px;height:28px;border-radius:999px;border:1px solid var(--line);background:var(--card);cursor:pointer;color:var(--ink2);}
+  .body{flex:1;overflow:auto;padding:8px 14px 14px;}
+  /* 状态板 */
+  .cols{display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;}
+  .col{min-width:150px;width:150px;background:color-mix(in srgb,var(--card) 65%,transparent);border:1px solid var(--line);
+       border-radius:14px;padding:7px;display:flex;flex-direction:column;gap:7px;min-height:100px;}
+  .col.dragover{outline:2px dashed var(--accent);outline-offset:-3px;}
+  .col h4{margin:0 2px;font-size:11px;color:var(--ink2);display:flex;justify-content:space-between;}
+  .col h4 .cnt{font-size:9px;color:var(--ink3);}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 9px;cursor:grab;
+        font-size:12px;box-shadow:0 2px 5px -3px rgba(0,0,0,.15);}
+  .card:hover{box-shadow:0 3px 8px -3px rgba(0,0,0,.22);}
+  .card.dragging{opacity:.4;}
+  .card .t{font-weight:600;line-height:1.3;}
+  .card .m{font-size:9px;color:var(--ink3);margin-top:4px;display:flex;gap:5px;align-items:center;}
+  .dot{width:6px;height:6px;border-radius:50%;display:inline-block;}
+  /* 列表 */
+  .listmode{display:flex;flex-direction:column;gap:7px;}
+  .listmode .card{display:flex;justify-content:space-between;align-items:center;}
+  .pill{font-size:9px;padding:1px 6px;border-radius:999px;background:var(--bg);color:var(--ink2);}
+  /* 月历 */
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+  .cal .dow{text-align:center;font-size:10px;color:var(--ink3);padding:4px 0;}
+  .day{min-height:78px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:5px 6px;font-size:11px;display:flex;flex-direction:column;gap:3px;}
+  .day.empty{background:transparent;border:1px dashed var(--line);opacity:.4;}
+  .day.today{outline:2px solid var(--accent);}
+  .day .dnum{font-weight:600;color:var(--ink2);}
+  .day.today .dnum{color:var(--accent);}
+  .day .cnt{font-size:9px;color:var(--ink3);}
+  .day .ev{font-size:10px;line-height:1.2;padding:1px 4px;border-radius:5px;background:var(--bg);border-left:2px solid var(--ink3);
+           white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .day .ev.urgent{border-left-color:var(--urgent);color:var(--urgent);}
+  .day .ev.high{border-left-color:var(--high);}
+  .readout{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-top:14px;}
+  .readout h5{margin:0 0 6px;font-size:12px;color:var(--ink2);}
+  .kv{display:flex;gap:8px;font-size:13px;margin:3px 0;font-family:ui-monospace,monospace;}
+  .kv b{color:var(--ink3);font-weight:500;min-width:84px;}
+  .hint{font-size:12px;color:var(--ink3);line-height:1.7;margin-top:12px;}
+  code{background:var(--card);padding:1px 5px;border-radius:5px;border:1px solid var(--line);font-size:11px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>子系统 A2 · 状态板 + 列表 + 月历</h1>
+  <p class="lead">右上角图标切：① 状态板（可拖，改状态/调顺序）② 月历（每天显示待办数 + 几件重要的，可翻月，只看不拖）③ 列表。改日期走详情里的日期选择器。</p>
+
+  <div class="stage">
+    <div class="viewswitch">
+      <button class="on" data-v="status" title="状态板"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="10" rx="1"/><rect x="17" y="4" width="4" height="13" rx="1"/></svg></button>
+      <button data-v="cal" title="月历"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg></button>
+      <button data-v="list" title="列表"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></button>
+    </div>
+    <div class="titlebar">
+      <div><h2 id="vt">待办 · 状态板</h2><p id="sub">拖到别的列改状态，列内拖调顺序</p></div>
+      <div class="monthnav" id="monthnav" style="display:none">
+        <button id="prev">‹</button><span id="mlabel"></span><button id="next">›</button>
+      </div>
+    </div>
+    <div class="body" id="body"></div>
+  </div>
+
+  <div class="readout"><h5>状态板拖拽的数据变化</h5><div id="readout"><span style="color:var(--ink3);font-size:13px">在「状态板」拖一张卡 →</span></div></div>
+  <p class="hint">月历每天格子：待办总数 + 最多 2 条重要的（紧急/高优先标色），点格子可看当天全部（真效用里点任务进详情，用日期选择器改 due_at）。改 due_at 的带提醒任务 → 自动 <code>pending_up</code> 同步。真机 dnd-kit 触摸 + 4 主题。</p>
+</div>
+
+<script>
+const STATUSES=[{id:'todo',label:'待办'},{id:'doing',label:'进行中'},{id:'done',label:'完成'},{id:'shelved',label:'搁置'},{id:'delayed',label:'延期'}];
+const urgColor=u=>u==='urgent'?'var(--urgent)':u==='high'?'var(--high)':'var(--ink3)';
+const urgLabel=u=>u==='urgent'?'紧急':u==='high'?'高':u==='low'?'低':'普通';
+const ymd=d=>`${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+
+// 用真实日期生成任务（今天起若干天 + 一些过去/无日期）
+function dayOffset(n){const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()+n);return d;}
+let tasks=[
+  {id:1,title:'回复张工的邮件',status:'todo',due:ymd(dayOffset(0)),urg:'urgent'},
+  {id:2,title:'整理本周复盘',status:'doing',due:ymd(dayOffset(0)),urg:'normal'},
+  {id:3,title:'订生日蛋糕',status:'todo',due:ymd(dayOffset(2)),urg:'high'},
+  {id:4,title:'看完《深度工作》第3章',status:'done',due:ymd(dayOffset(-1)),urg:'normal'},
+  {id:5,title:'预约牙医',status:'delayed',due:null,urg:'normal'},
+  {id:6,title:'写周报',status:'todo',due:ymd(dayOffset(3)),urg:'high'},
+  {id:7,title:'调研 dnd-kit',status:'doing',due:ymd(dayOffset(1)),urg:'normal'},
+  {id:8,title:'季度规划草稿',status:'todo',due:ymd(dayOffset(7)),urg:'urgent'},
+  {id:9,title:'整理云盘',status:'shelved',due:null,urg:'low'},
+  {id:10,title:'还信用卡',status:'todo',due:ymd(dayOffset(5)),urg:'high'},
+];
+tasks.forEach((t,i)=>t.order=i);
+let view='status'; let dragId=null;
+let calMonth=new Date(); calMonth.setDate(1);
+
+function render(){
+  const vt=document.getElementById('vt'),sub=document.getElementById('sub'),mn=document.getElementById('monthnav');
+  if(view==='status'){vt.textContent='待办 · 状态板';sub.textContent='拖到别的列改状态，列内拖调顺序';mn.style.display='none';renderStatus();}
+  else if(view==='list'){vt.textContent='待办 · 列表';sub.textContent='按顺序';mn.style.display='none';renderList();}
+  else{vt.textContent='待办 · 月历';sub.textContent='每天显示待办数 + 重要的';mn.style.display='flex';renderCal();}
+}
+
+function renderStatus(){
+  const body=document.getElementById('body');body.innerHTML='';
+  const cols=document.createElement('div');cols.className='cols';
+  STATUSES.forEach(s=>{
+    const items=tasks.filter(t=>t.status===s.id).sort((a,b)=>a.order-b.order);
+    const div=document.createElement('div');div.className='col';div.dataset.col=s.id;
+    div.innerHTML=`<h4>${s.label} <span class="cnt">${items.length}</span></h4>`;
+    items.forEach(t=>div.appendChild(cardEl(t)));
+    cols.appendChild(div);
+  });
+  body.appendChild(cols);bindDnD();
+}
+function renderList(){
+  const body=document.getElementById('body');body.innerHTML='<div class="listmode"></div>';
+  const lm=body.firstChild;
+  [...tasks].sort((a,b)=>a.order-b.order).forEach(t=>{
+    const c=cardEl(t);const r=document.createElement('span');r.className='pill';
+    r.textContent=STATUSES.find(s=>s.id===t.status).label;c.querySelector('.m').remove();c.appendChild(r);lm.appendChild(c);
+  });
+}
+function renderCal(){
+  document.getElementById('mlabel').textContent=`${calMonth.getFullYear()} 年 ${calMonth.getMonth()+1} 月`;
+  const body=document.getElementById('body');
+  let html='<div class="cal">';
+  ['一','二','三','四','五','六','日'].forEach(d=>html+=`<div class="dow">${d}</div>`);
+  const y=calMonth.getFullYear(),m=calMonth.getMonth();
+  const first=new Date(y,m,1); const startOff=(first.getDay()===0?6:first.getDay()-1);
+  const daysInMonth=new Date(y,m+1,0).getDate();
+  const today=ymd(new Date());
+  for(let i=0;i<startOff;i++)html+='<div class="day empty"></div>';
+  for(let d=1;d<=daysInMonth;d++){
+    const ds=ymd(new Date(y,m,d));
+    const dayTasks=tasks.filter(t=>t.due===ds);
+    const isToday=ds===today;
+    const key=dayTasks.filter(t=>t.urg==='urgent'||t.urg==='high').sort((a,b)=>(a.urg==='urgent'?0:1)-(b.urg==='urgent'?0:1)).slice(0,2);
+    html+=`<div class="day ${isToday?'today':''}">
+      <div class="dnum">${d}${isToday?' ·今天':''}</div>
+      ${dayTasks.length?`<div class="cnt">${dayTasks.length} 件</div>`:''}
+      ${key.map(t=>`<div class="ev ${t.urg}">${t.title}</div>`).join('')}
+    </div>`;
+  }
+  html+='</div>';body.innerHTML=html;
+}
+
+function cardEl(t){
+  const c=document.createElement('div');c.className='card';c.draggable=true;c.dataset.id=t.id;
+  const dd=t.due?`${t.due}`:'无日期';
+  c.innerHTML=`<div class="t">${t.title}</div><div class="m"><span class="dot" style="background:${urgColor(t.urg)}"></span>${urgLabel(t.urg)} · ${dd}</div>`;
+  return c;
+}
+function bindDnD(){
+  document.querySelectorAll('.card').forEach(c=>{
+    c.addEventListener('dragstart',e=>{dragId=+c.dataset.id;c.classList.add('dragging');e.dataTransfer.effectAllowed='move';});
+    c.addEventListener('dragend',()=>{c.classList.remove('dragging');document.querySelectorAll('.col').forEach(x=>x.classList.remove('dragover'));});
+  });
+  document.querySelectorAll('.col').forEach(col=>{
+    col.addEventListener('dragover',e=>{e.preventDefault();col.classList.add('dragover');});
+    col.addEventListener('dragleave',()=>col.classList.remove('dragover'));
+    col.addEventListener('drop',e=>{
+      e.preventDefault();col.classList.remove('dragover');if(dragId==null)return;
+      const t=tasks.find(x=>x.id===dragId);if(!t)return;
+      const s=STATUSES.find(x=>x.id===col.dataset.col);if(t.status!==s.id)t.status=s.id;
+      const before=[...col.querySelectorAll('.card')].find(c=>{const r=c.getBoundingClientRect();return e.clientY<r.top+r.height/2;});
+      const same=tasks.filter(x=>x.status===t.status).sort((a,b)=>a.order-b.order);
+      same.splice(same.findIndex(x=>x.id===t.id),1);
+      if(before){const bi=same.findIndex(x=>x.id===+before.dataset.id);same.splice(bi,0,t);}
+      same.forEach((x,i)=>x.order=i);
+      showReadout(t);renderStatus();
+    });
+  });
+}
+function showReadout(t){
+  document.getElementById('readout').innerHTML=`
+    <div class="kv"><b>title</b><span>${t.title}</span></div>
+    <div class="kv"><b>status</b><span>${STATUSES.find(s=>s.id===t.status).label}（${t.status}）</span></div>
+    <div class="kv"><b>due_at</b><span>${t.due||'未排期'}</span></div>
+    <div class="kv"><b>board_order</b><span>${t.order}（真效用 float 中点）</span></div>
+    <div class="kv"><b>sync_state</b><span>${t.due?'→ pending_up（触发同步）':'clean'}</span></div>`;
+}
+
+document.querySelectorAll('.viewswitch button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.viewswitch button').forEach(x=>x.classList.remove('on'));b.classList.add('on');view=b.dataset.v;render();}));
+document.getElementById('prev').addEventListener('click',()=>{calMonth.setMonth(calMonth.getMonth()-1);renderCal();});
+document.getElementById('next').addEventListener('click',()=>{calMonth.setMonth(calMonth.getMonth()+1);renderCal();});
+render();
+</script>
+</body>
+</html>

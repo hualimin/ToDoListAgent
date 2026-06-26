@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>子系统A2 · 看板+拖拽 交互原型</title>
+<style>
+  :root{
+    --bg:#F5F1E8; --card:#FBF8F0; --ink:#2E3A2E; --ink2:#5E6B58; --ink3:#9AA28E;
+    --line:#E2DAC4; --accent:#6B8E5A; --accent2:#8FAE7B;
+    --urgent:#C17A54; --high:#D4B063; --done:#6B8E5A;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;background:#E8E0CC;color:var(--ink);}
+  .wrap{max-width:1100px;margin:0 auto;padding:24px;}
+  .phone{width:390px;margin:0 auto;background:var(--bg);border-radius:36px;border:1px solid var(--line);
+         box-shadow:0 20px 50px -18px rgba(0,0,0,.3);overflow:hidden;height:780px;display:flex;flex-direction:column;}
+  .topbar{display:flex;gap:6px;padding:12px 14px 8px;}
+  .mode{flex:1;text-align:center;padding:8px 0;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;
+        background:transparent;color:var(--ink2);border:1px solid var(--line);}
+  .mode.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .sub{padding:0 14px 8px;font-size:11px;color:var(--ink3);}
+  .board{flex:1;overflow:auto;padding:0 10px 14px;}
+  .cols{display:flex;gap:8px;min-width:max-content;}
+  .col{width:200px;background:color-mix(in srgb,var(--card) 70%,transparent);border:1px solid var(--line);
+       border-radius:16px;padding:8px;display:flex;flex-direction:column;gap:8px;min-height:120px;}
+  .col.dragover{outline:2px dashed var(--accent);outline-offset:-4px;background:color-mix(in srgb,var(--accent) 12%,var(--card));}
+  .col h4{margin:0 2px;font-size:12px;color:var(--ink2);display:flex;justify-content:space-between;align-items:center;}
+  .col h4 .cnt{font-size:10px;color:var(--ink3);background:var(--bg);padding:1px 6px;border-radius:999px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:9px 10px;cursor:grab;
+        font-size:13px;box-shadow:0 2px 6px -3px rgba(0,0,0,.15);transition:transform .1s,box-shadow .1s;}
+  .card:hover{box-shadow:0 4px 10px -3px rgba(0,0,0,.2);}
+  .card.dragging{opacity:.4;}
+  .card .t{font-weight:600;}
+  .card .m{font-size:10px;color:var(--ink3);margin-top:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block;}
+  .pill{font-size:9px;padding:1px 6px;border-radius:999px;background:var(--bg);color:var(--ink2);}
+  /* 列表模式 */
+  .list{display:flex;flex-direction:column;gap:8px;}
+  .list .card{display:flex;justify-content:space-between;align-items:center;}
+  /* 读数面板 */
+  .readout{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-top:16px;}
+  .readout h5{margin:0 0 6px;font-size:12px;color:var(--ink2);}
+  .kv{display:flex;gap:8px;font-size:13px;margin:3px 0;font-family:ui-monospace,monospace;}
+  .kv b{color:var(--ink3);font-weight:500;min-width:78px;}
+  .kv span{color:var(--ink);}
+  .hint{font-size:12px;color:var(--ink3);line-height:1.6;margin-top:14px;}
+  .hint b{color:var(--ink2);}
+  h1{font-size:20px;margin:0 0 4px;}
+  .lead{font-size:13px;color:var(--ink2);margin:0 0 18px;}
+  .legend{display:flex;gap:10px;font-size:11px;color:var(--ink3);margin-bottom:14px;flex-wrap:wrap;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>子系统 A2 · 看板 + 拖拽</h1>
+  <p class="lead">拖动任务卡感受三个点：① 切"列表/状态板/时间板" ② 跨列拖=改状态或日期 ③ 列内拖到某卡前=调顺序。下方实时显示最近移动卡的数据变化。</p>
+  <div class="legend">
+    <span><span class="dot" style="background:var(--urgent)"></span> 紧急</span>
+    <span><span class="dot" style="background:var(--high)"></span> 高</span>
+    <span><span class="dot" style="background:var(--ink3)"></span> 普通</span>
+    <span>状态：待办/进行中/完成/搁置/延期</span>
+  </div>
+
+  <div class="phone">
+    <div class="topbar">
+      <div class="mode" data-mode="list">列表</div>
+      <div class="mode on" data-mode="status">状态板</div>
+      <div class="mode" data-mode="time">时间板</div>
+    </div>
+    <div class="sub" id="sub">状态板：拖到别的列=改状态；拖到某卡前=调顺序</div>
+    <div class="board" id="board"></div>
+  </div>
+
+  <div class="readout">
+    <h5>最近一次拖拽的数据变化（这就是拖拽的语义）</h5>
+    <div id="readout"><span style="color:var(--ink3);font-size:13px">试着拖一张卡片 →</span></div>
+  </div>
+  <p class="hint">
+    <b>实际实现要点（已在设计里）：</b> 状态板拖到"进行中"列 → 调 <code>moveStatus(id,'doing')</code>；时间板拖到"周三"列 → 调 <code>moveDate(id, 周三日期)</code>；列内拖到两张卡之间 → 用 <code>board_order</code> 中点重排（修地基的冲突 bug）。改了 due_at 的带提醒任务会自动 <code>pending_up</code> 触发同步。<br/>
+    <b>说明：</b> 此 demo 用桌面 HTML5 拖拽便于你上手；真机移动端会改用 dnd-kit（支持触摸），并套用 4 套主题。
+  </p>
+</div>
+
+<script>
+const STATUSES = [
+  {id:'todo',label:'待办'},{id:'doing',label:'进行中'},{id:'done',label:'完成'},
+  {id:'shelved',label:'搁置'},{id:'delayed',label:'延期'}
+];
+// 本周 周一~周日
+function weekDates(){
+  const now=new Date(); const idx=now.getDay()===0?6:now.getDay()-1;
+  const mon=new Date(now); mon.setDate(now.getDate()-idx);
+  const fmt=d=>`${d.getMonth()+1}/${d.getDate()}`;
+  const wd=['周一','周二','周三','周四','周五','周六','周日'];
+  return Array.from({length:7},(_,i)=>{const d=new Date(mon);d.setDate(mon.getDate()+i);return{id:`w${i}`,label:wd[i],sub:fmt(d),date:d};});
+}
+const WEEK=weekDates();
+
+let tasks=[
+  {id:1,title:'回复张工的邮件',status:'todo',date:'w2',urg:'urgent',order:0},
+  {id:2,title:'整理本周复盘',status:'doing',date:'w2',urg:'normal',order:0},
+  {id:3,title:'订生日蛋糕',status:'todo',date:'w3',urg:'high',order:0},
+  {id:4,title:'看完《深度工作》第3章',status:'done',date:'w1',urg:'normal',order:0},
+  {id:5,title:'预约牙医',status:'delayed',date:null,urg:'normal',order:0},
+  {id:6,title:'写周报',status:'todo',date:'w4',urg:'high',order:0},
+  {id:7,title:'调研 dnd-kit',status:'doing',date:'w0',urg:'normal',order:0},
+];
+let mode='status';
+let dragId=null;
+
+const urgColor=u=>u==='urgent'?'var(--urgent)':u==='high'?'var(--high)':'var(--ink3)';
+const urgLabel=u=>u==='urgent'?'紧急':u==='high'?'高':'普通';
+
+function recomputeOrder(){
+  // 每个"列"内按当前顺序重排 order（演示用；真效用中点算法）
+  const groups={};
+  tasks.forEach(t=>{const k=mode==='status'?'s'+t.status:'d'+(t.date??'none');(groups[k]??=[]).push(t);});
+  Object.values(groups).forEach(g=>g.forEach((t,i)=>t.order=i));
+}
+
+function render(){
+  const board=document.getElementById('board');
+  if(mode==='list'){
+    document.getElementById('sub').textContent='列表模式：与地基现有列表一致（趋势/周历在上方，这里省略）';
+    board.innerHTML='<div class="list"></div>';
+    const list=board.firstChild;
+    [...tasks].sort((a,b)=>a.order-b.order).forEach(t=>{
+      const c=cardEl(t); c.style.display='flex';
+      const right=document.createElement('span'); right.className='pill'; right.textContent=STATUSES.find(s=>s.id===t.status).label;
+      c.querySelector('.m').remove();
+      c.appendChild(right);
+      list.appendChild(c);
+    });
+    return;
+  }
+  const sub=document.getElementById('sub');
+  if(mode==='status') sub.textContent='状态板：拖到别的列=改状态；拖到某卡前=调顺序';
+  else sub.textContent='时间板：拖到别的天=改日期；拖到某卡前=调顺序';
+
+  const cols=document.createElement('div'); cols.className='cols';
+  const columns = mode==='status'
+    ? STATUSES.map(s=>({id:s.id,label:s.label,match:t=>t.status===s.id}))
+    : [...WEEK.map(w=>({id:w.id,label:w.label,sub:w.sub,match:t=>t.date===w.id})), {id:'none',label:'未排期',sub:'',match:t=>t.date==null}];
+
+  columns.forEach(col=>{
+    const items=tasks.filter(col.match).sort((a,b)=>a.order-b.order);
+    const div=document.createElement('div'); div.className='col'; div.dataset.col=col.id;
+    div.innerHTML=`<h4>${col.label}${col.sub?` <span style="font-weight:400;color:var(--ink3)">${col.sub}</span>`:''} <span class="cnt">${items.length}</span></h4>`;
+    items.forEach(t=>div.appendChild(cardEl(t)));
+    cols.appendChild(div);
+  });
+  board.innerHTML=''; board.appendChild(cols);
+  bindDnd();
+}
+
+function cardEl(t){
+  const c=document.createElement('div'); c.className='card'; c.draggable=true; c.dataset.id=t.id;
+  const w = WEEK.find(x=>x.id===t.date);
+  c.innerHTML=`<div class="t">${t.title}</div>
+    <div class="m"><span class="dot" style="background:${urgColor(t.urg)}"></span>${urgLabel(t.urg)}
+      ${w?` · <span>${w.label}</span>`:' · 无日期'}</div>`;
+  return c;
+}
+
+function bindDnd(){
+  document.querySelectorAll('.card').forEach(c=>{
+    c.addEventListener('dragstart',e=>{dragId=+c.dataset.id;c.classList.add('dragging');e.dataTransfer.effectAllowed='move';});
+    c.addEventListener('dragend',()=>{c.classList.remove('dragging');document.querySelectorAll('.col').forEach(x=>x.classList.remove('dragover'));dragId=null;});
+  });
+  document.querySelectorAll('.col').forEach(col=>{
+    col.addEventListener('dragover',e=>{e.preventDefault();col.classList.add('dragover');});
+    col.addEventListener('dragleave',()=>col.classList.remove('dragover'));
+    col.addEventListener('drop',e=>{
+      e.preventDefault();col.classList.remove('dragover');
+      if(dragId==null)return;
+      const t=tasks.find(x=>x.id===dragId); if(!t)return;
+      const beforeCard=[...col.querySelectorAll('.card')].find(c=>{
+        const r=c.getBoundingClientRect();return e.clientY<r.top+r.height/2;
+      });
+      // 改维度
+      if(mode==='status'){ const target=STATUSES.find(s=>s.id===col.dataset.col); if(t.status!==target.id)t.status=target.id; }
+      else{ const dv=col.dataset.col; const nd = dv==='none'?null:dv; if(t.date!==nd)t.date=nd; }
+      // 重排：把拖的卡放到目标位置
+      recomputeOrder();
+      if(beforeCard){
+        const bid=+beforeCard.dataset.id;
+        const same=tasks.filter(x=>(mode==='status'?x.status===t.status:(x.date??'none')===(t.date??'none'))).sort((a,b)=>a.order-b.order);
+        const bi=same.findIndex(x=>x.id===bid);
+        same.splice(same.findIndex(x=>x.id===t.id),1);
+        same.splice(bi,0,t);
+        same.forEach((x,i)=>x.order=i);
+      }
+      showReadout(t);
+      render();
+    });
+  });
+}
+
+function showReadout(t){
+  const w=WEEK.find(x=>x.id===t.date);
+  const st=STATUSES.find(s=>s.id===t.status);
+  document.getElementById('readout').innerHTML=`
+    <div class="kv"><b>title</b><span>${t.title}</span></div>
+    <div class="kv"><b>status</b><span>${st.label}（${t.status}）</span></div>
+    <div class="kv"><b>due_at</b><span>${w?w.label+' '+w.sub:'未排期（null）'}</span></div>
+    <div class="kv"><b>board_order</b><span>${t.order}（列内序号，真效用 float 中点）</span></div>
+    <div class="kv"><b>sync_state</b><span>${(t.date!=null)?'→ pending_up（触发同步）':'clean'}</span></div>`;
+}
+
+document.querySelectorAll('.mode').forEach(m=>{
+  m.addEventListener('click',()=>{document.querySelectorAll('.mode').forEach(x=>x.classList.remove('on'));m.classList.add('on');mode=m.dataset.mode;recomputeOrder();render();});
+});
+
+recomputeOrder();render();
+</script>
+</body>
+</html>
