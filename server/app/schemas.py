@@ -46,3 +46,26 @@ class ParseResponse(BaseModel):
     urgency: str = "normal"
     due_at: str | None = None
     raw_response: str = ""
+
+
+class ArrangeTaskItem(BaseModel):
+    task_ref: str
+    title: str
+    urgency: str = "normal"
+    due_at: str | None = None
+
+
+class ArrangeRequest(BaseModel):
+    tasks: list[ArrangeTaskItem]
+    busy: list[dict] = []  # [{start, end}]
+
+
+class ArrangeResultItem(BaseModel):
+    task_ref: str
+    suggested_at: str | None
+    reason: str = ""
+    status: str  # 'scheduled' | 'overflow'
+
+
+class ArrangeResponse(BaseModel):
+    results: list[ArrangeResultItem]
