@@ -12,6 +12,12 @@ export function TaskDetail({ task, onClose }: { task: Task | null; onClose: () =
         <h3 className="text-xl font-bold text-ink leading-tight">{task.title}</h3>
         <p className="text-xs text-ink3 mt-2">{task.due_at ? `截止 ${new Date(task.due_at).toLocaleString('zh-CN')}` : '无截止'} · 来源：{task.input_source}</p>
         {task.content && <><p className="text-[10px] text-ink3 uppercase mt-5 mb-2">内容</p><p className="text-sm text-ink2 leading-relaxed">{task.content}</p></>}
+        {task.image_data && (
+          <div className="mt-5">
+            <label className="text-[11px] text-ink3 block mb-1">原图</label>
+            <img src={task.image_data} alt="任务原图" className="rounded-card border border-line max-h-48 object-cover w-full" />
+          </div>
+        )}
         <p className="text-[10px] text-ink3 uppercase mt-5 mb-2">原始记录</p>
         <div className="rounded-card border border-line p-3 text-sm text-ink2" style={{ background: 'var(--c-card)' }}>
           {task.input_source === 'voice' ? '🎙️ 语音（含转写）' : task.input_source === 'photo' ? '📷 图片 + 文字' : '📝 文字'}：{task.content || task.title}
