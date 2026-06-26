@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import scheduler as scheduler_module
 from app.db import init_db
-from app.routers import config_router, health, reminders
+from app.routers import config_router, health, reminders, tasks
 
 _scheduler_ref = None
 
@@ -36,3 +36,4 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(config_router.router)
 app.include_router(reminders.router)
+app.include_router(tasks.router)
