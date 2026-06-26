@@ -33,3 +33,20 @@ def call_agent(function_name: str, prompt: str, *, timeout: float = 30.0) -> str
     resp.raise_for_status()
     data = resp.json()
     return data["choices"][0]["message"]["content"]
+
+
+def call_agent_multimodal(function_name: str, content_blocks: list[dict], *, timeout: float = 30.0) -> str:
+    """多模态调用：content_blocks 是 [{type:text,text:...}, {type:image_url,image_url:{url:...}}]。"""
+    cfg = get_agent_config(function_name)
+    if cfg is None:
+        raise NotConfiguredError(f"Agent 功能 '{function_name}' 未配置")
+    url = cfg.base_url.rstrip("/") + "/chat/completions"
+    headers = {"Authorization": f"Bearer {cfg.api_key}", "Content-Type": "application/json"}
+    payload = {
+        "model": cfg.model,
+        "messages": [{"role": "user", "content": content_blocks}],
+    }
+    resp = httpx.post(url, headers=headers, json=payload, timeout=timeout)
+    resp.raise_for_status()
+    data = resp.json()
+    return data["choices"][0]["message"]["content"]

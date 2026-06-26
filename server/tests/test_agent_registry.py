@@ -52,3 +52,34 @@ def test_http_error_propagates(monkeypatch, tmp_path):
     import httpx as _httpx
     with pytest.raises(_httpx.HTTPStatusError):
         call_agent("task_parse", "hi")
+
+
+def test_multimodal_sends_image_url(monkeypatch, tmp_path):
+    from app import config
+    from app.secrets_store import SecretsFile, save_secrets
+    from app.agent_registry import call_agent_multimodal
+    import httpx
+
+    p = tmp_path / "secrets.local.json"
+    monkeypatch.setattr(config, "SECRETS_PATH", p)
+    save_secrets(SecretsFile(auth={"access_token": "t"},
+        agents={"task_parse": {"provider": "openai", "base_url": "https://api.openai.com/v1",
+                                "model": "gpt-4o", "api_key": "sk-test"}},
+        notifications={}))
+
+    captured = {}
+    def fake_post(url, *, headers, json, timeout):
+        captured["url"] = url
+        captured["json"] = json
+        return httpx.Response(200, request=httpx.Request("POST", url),
+                              json={"choices": [{"message": {"content": "明天买牛奶，紧急"}}]})
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = call_agent_multimodal("task_parse", [
+        {"type": "text", "text": "解析这个任务"},
+        {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,abc"}},
+    ])
+    assert result == "明天买牛奶，紧急"
+    content = captured["json"]["messages"][0]["content"]
+    assert isinstance(content, list)
+    assert any(b.get("type") == "image_url" for b in content)
