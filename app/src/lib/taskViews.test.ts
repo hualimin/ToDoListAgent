@@ -3,7 +3,7 @@ import { withinRange, groupByDay, weeklyTrend } from './taskViews'
 import type { Task } from '../db/types'
 const now = new Date('2026-06-24T10:00:00Z') // 周三
 function mk(p: Partial<Task>): Task {
-  return { id: p.id ?? 'x', user_id: 1, title: p.title ?? 't', content: '', input_source: 'text', urgency: 'normal', status: p.status ?? 'todo', due_at: p.due_at ?? null, scheduled_at: null, board_order: 0, created_at: '2026-06-20T00:00:00Z', updated_at: p.updated_at ?? '2026-06-24T00:00:00Z', deleted_at: null, sync_state: 'clean' }
+  return { id: p.id ?? 'x', user_id: 1, title: p.title ?? 't', content: '', input_source: 'text', urgency: 'normal', status: p.status ?? 'todo', due_at: p.due_at ?? null, scheduled_at: null, board_order: 0, created_at: '2026-06-20T00:00:00Z', updated_at: p.updated_at ?? '2026-06-24T00:00:00Z', deleted_at: null, sync_state: 'clean', image_data: null }
 }
 describe('taskViews', () => {
   it('today 只含今天到期', () => {

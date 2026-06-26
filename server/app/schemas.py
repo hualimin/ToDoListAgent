@@ -33,3 +33,16 @@ class ReminderOut(BaseModel):
     channels: list[str]
     status: str
     payload: dict
+
+
+class ParseRequest(BaseModel):
+    text: str | None = None
+    image_base64: str | None = None
+
+
+class ParseResponse(BaseModel):
+    title: str
+    content: str
+    urgency: str = "normal"
+    due_at: str | None = None
+    raw_response: str = ""
