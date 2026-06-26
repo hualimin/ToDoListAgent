@@ -40,6 +40,7 @@ export class InMemoryTaskRepository implements TaskRepository {
       updated_at: now(),
       deleted_at: null,
       sync_state: 'clean',
+      image_data: input.image_data ?? null,
     }
     this.items.set(t.id, t)
     return t
