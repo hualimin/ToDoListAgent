@@ -69,3 +69,29 @@ class ArrangeResultItem(BaseModel):
 
 class ArrangeResponse(BaseModel):
     results: list[ArrangeResultItem]
+
+
+class LearningExample(BaseModel):
+    level: str  # "入门"/"进阶"/"实战"
+    content: str
+
+
+class LearningConcept(BaseModel):
+    name: str
+    explanation: str
+    examples: list[LearningExample] = []
+    references: list[str] = []
+
+
+class LearningPathRequest(BaseModel):
+    topic: str
+    urls: list[str] | None = None
+    text: str | None = None
+    research_mode: str = "default"  # "default" | "custom"
+    custom_prompt: str | None = None
+
+
+class LearningPathResponse(BaseModel):
+    title: str
+    description: str = ""
+    concepts: list[LearningConcept] = []
