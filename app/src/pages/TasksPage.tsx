@@ -5,6 +5,7 @@ import { TrendChart } from '../components/TrendChart'
 import { TaskCard } from '../components/TaskCard'
 import { TaskDetail } from '../components/TaskDetail'
 import { InputBar } from '../components/InputBar'
+import { ArrangePanel } from '../components/ArrangePanel'
 import { withinRange, groupByDay, weeklyTrend, type Range } from '../lib/taskViews'
 import type { Task } from '../db/types'
 const RANGES: Range[] = ['today', 'week', 'month', 'all']
@@ -27,6 +28,7 @@ export function TasksPage() {
           <button key={r} onClick={() => setRange(r)} className="text-[11px] px-3 py-1 rounded-pill" style={r === range ? { background: 'var(--c-ink)', color: 'var(--c-bg)' } : { background: 'var(--c-card)', color: 'var(--c-ink2)', border: '1px solid var(--c-line)' }}>{RANGE_LABEL[r]}</button>
         ))}
       </div>
+      <div className="mt-4"><ArrangePanel /></div>
       <div className="mt-4"><InputBar /></div>
       <div className="mt-4 space-y-3">
         {buckets.length === 0 && <p className="text-sm text-ink3">该范围暂无任务</p>}
