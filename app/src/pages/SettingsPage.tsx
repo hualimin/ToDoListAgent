@@ -3,6 +3,14 @@ import { useAuthStore } from '../store/authStore'
 import { createApiClient } from '../api/client'
 import { ThemeSwitcher } from '../components/ThemeSwitcher'
 
+type Config = Record<string, any>
+
+interface ProviderEntry {
+  name: string
+  base_url: string
+  api_key: string // GET 回显为 '***'；编辑时空字符串=不改
+}
+
 const AGENT_LIST = [
   { key: 'task_parse', label: '任务解析' },
   { key: 'urgency_rank', label: '紧急度判定' },
@@ -11,62 +19,185 @@ const AGENT_LIST = [
   { key: 'researcher', label: '调研' },
 ]
 
+function slugify(name: string): string {
+  // 中文名/特殊字符 → ascii 占位，保证 id 稳定
+  const base = name
+    .toLowerCase()
+    .replace(/[\s\-]+/g, '_')
+    .replace(/[^a-z0-9_]/g, '')
+    .replace(/^_+|_+$/g, '')
+  return base || 'provider'
+}
+
 export function SettingsPage() {
   const { baseURL, token, set } = useAuthStore()
   const [base, setBase] = useState(baseURL)
   const [tok, setTok] = useState(token)
   const [msg, setMsg] = useState('')
-  const [config, setConfig] = useState<Record<string, any> | null>(null)
-  const [expanded, setExpanded] = useState<string | null>(null)
-  // 编辑中的 agent 配置（独立 state，保存时提交）
-  const [edits, setEdits] = useState<Record<string, { base_url: string; model: string; api_key: string }>>({})
+  const [config, setConfig] = useState<Config | null>(null)
+
+  // 供应商编辑面板：editingId=null=未开；''=新建；具体id=编辑
+  const [editingProvider, setEditingProvider] = useState<string | null>(null)
+  const [providerForm, setProviderForm] = useState<ProviderEntry>({ name: '', base_url: '', api_key: '' })
+  const [detectedModels, setDetectedModels] = useState<string[]>([])
+  const [detectMsg, setDetectMsg] = useState('')
+
+  // agent 分配编辑：{funcKey: {provider, model}}
+  const [agentEdits, setAgentEdits] = useState<Record<string, { provider: string; model: string }>>({})
+  // 每个 provider 检测到的模型缓存（id → models）
+  const [providerModels, setProviderModels] = useState<Record<string, string[]>>({})
+
+  const apiBase = () => base.trim() || baseURL
+  const apiTok = () => tok.trim() || token
+  const api = () => createApiClient({ baseURL: apiBase(), token: apiTok() })
 
   async function loadConfig() {
     try {
-      const api = createApiClient({ baseURL: base.trim() || baseURL, token: tok.trim() || token })
-      const cfg = await api.get<Record<string, any>>('/api/config')
+      const cfg = await api().get<Config>('/api/config')
       setConfig(cfg)
-      // 初始化编辑状态（api_key 不回显——GET 返回 ***，编辑时留空=不改）
-      const init: Record<string, any> = {}
+      const init: Record<string, { provider: string; model: string }> = {}
       for (const a of AGENT_LIST) {
-        const existing = cfg.agents?.[a.key]
-        init[a.key] = { base_url: existing?.base_url || '', model: existing?.model || '', api_key: '' }
+        const ex = cfg.agents?.[a.key]
+        init[a.key] = { provider: ex?.provider || '', model: ex?.model || '' }
       }
-      setEdits(init)
-    } catch { setConfig(null) }
+      setAgentEdits(init)
+    } catch {
+      setConfig(null)
+    }
   }
 
-  useEffect(() => { if (token) loadConfig() }, [])
+  useEffect(() => {
+    if (token) loadConfig()
+  }, [])
 
-  function save() { set(base.trim(), tok.trim()); setMsg('已保存') }
+  function save() {
+    set(base.trim(), tok.trim())
+    setMsg('已保存')
+  }
 
   async function testConn() {
     setMsg('连接中…')
     try {
-      const api = createApiClient({ baseURL: base.trim() || baseURL, token: tok.trim() || token })
-      await api.get('/api/config')
+      await api().get('/api/config')
       setMsg('连接成功')
       loadConfig()
-    } catch (e) { setMsg('连接失败：' + (e as Error).message) }
+    } catch (e) {
+      setMsg('连接失败：' + (e as Error).message)
+    }
   }
 
-  async function saveAgent(key: string) {
-    const ed = edits[key]
+  // ---- 供应商管理 ----
+  function providerEntries(): { id: string; name: string; base_url: string; hasKey: boolean }[] {
+    const ps = config?.providers || {}
+    return Object.entries(ps)
+      .filter(([id]) => !id.startsWith('_'))
+      .map(([id, v]: [string, any]) => ({ id, name: v?.name || id, base_url: v?.base_url || '', hasKey: !!v?.api_key }))
+  }
+
+  function openNewProvider() {
+    setEditingProvider('')
+    setProviderForm({ name: '', base_url: '', api_key: '' })
+    setDetectedModels([])
+    setDetectMsg('')
+  }
+
+  function openEditProvider(id: string) {
+    const p = config?.providers?.[id]
+    setEditingProvider(id)
+    setProviderForm({ name: p?.name || id, base_url: p?.base_url || '', api_key: '' })
+    setDetectedModels(providerModels[id] || [])
+    setDetectMsg('')
+  }
+
+  async function detectModelsForForm() {
+    const { base_url, api_key } = providerForm
+    if (!base_url || !api_key) {
+      setDetectMsg('请先填 Base URL 和 API Key')
+      return
+    }
+    setDetectMsg('检测中…')
+    try {
+      const r = await api().post<{ ok: boolean; message: string; models: string[] }>('/api/config/test-agent', {
+        base_url, api_key,
+      })
+      setDetectedModels(r.models || [])
+      setDetectMsg(r.models?.length ? `检测到 ${r.models.length} 个模型` : (r.message || '未检测到模型，可手动填写'))
+    } catch (e) {
+      setDetectMsg('检测失败：' + (e as Error).message)
+    }
+  }
+
+  async function testConnectionForForm() {
+    const { base_url, api_key } = providerForm
+    if (!base_url || !api_key) {
+      setDetectMsg('请先填 Base URL 和 API Key')
+      return
+    }
+    setDetectMsg('测试中…')
+    try {
+      const r = await api().post<{ ok: boolean; message: string; models: string[] }>('/api/config/test-agent', {
+        base_url, api_key, model: detectedModels[0] || undefined,
+      })
+      setDetectMsg(r.message)
+    } catch (e) {
+      setDetectMsg('测试失败：' + (e as Error).message)
+    }
+  }
+
+  async function saveProvider() {
+    const { name, base_url, api_key } = providerForm
+    if (!name.trim() || !base_url.trim()) {
+      setDetectMsg('请填名称和 Base URL')
+      return
+    }
+    let id = editingProvider || slugify(name)
+    // 避免与已存在 id 冲突（新建时）
+    if (editingProvider === '' && (config?.providers || {})[id]) {
+      let n = 2
+      while ((config?.providers || {})[`${id}_${n}`]) n++
+      id = `${id}_${n}`
+    }
+    const patch: Record<string, any> = { name: name.trim(), base_url: base_url.trim() }
+    if (api_key.trim()) patch.api_key = api_key.trim()
+    try {
+      await api().put('/api/config', { providers: { [id]: patch } })
+      setMsg(`供应商「${name}」已保存`)
+      setEditingProvider(null)
+      await loadConfig()
+    } catch (e) {
+      setDetectMsg('保存失败：' + (e as Error).message)
+    }
+  }
+
+  async function deleteProvider(id: string) {
+    const p = config?.providers?.[id]
+    if (!p) return
+    if (!confirm(`确定删除供应商「${p?.name || id}」？引用它的功能需重新分配。`)) return
+    try {
+      // 后端 _deep_merge：override 值为 null → 删除该 key
+      await api().put('/api/config', { providers: { [id]: null } })
+      setMsg(`供应商「${p?.name || id}」已删除`)
+      await loadConfig()
+    } catch (e) {
+      setMsg('删除失败：' + (e as Error).message)
+    }
+  }
+
+  // ---- agent 分配 ----
+  function setAgentField(funcKey: string, field: 'provider' | 'model', value: string) {
+    setAgentEdits((prev) => ({ ...prev, [funcKey]: { ...prev[funcKey], [field]: value } }))
+  }
+
+  async function saveAgent(funcKey: string) {
+    const ed = agentEdits[funcKey]
     if (!ed) return
     try {
-      const api = createApiClient({ baseURL: base.trim() || baseURL, token: tok.trim() || token })
-      // 只发改了的字段；api_key 为空=不改（保留原有）
-      const patch: Record<string, any> = { base_url: ed.base_url, model: ed.model, provider: 'openai' }
-      if (ed.api_key.trim()) patch.api_key = ed.api_key.trim()
-      await api.put('/api/config', { agents: { [key]: patch } })
-      setMsg(`${AGENT_LIST.find((a) => a.key === key)?.label} 已保存`)
-      loadConfig()
-    } catch (e) { setMsg('保存失败：' + (e as Error).message) }
-  }
-
-  function agentStatus(key: string): 'on' | 'off' {
-    const a = config?.agents?.[key]
-    return a && a.api_key ? 'on' : 'off'
+      await api().put('/api/config', { agents: { [funcKey]: { provider: ed.provider, model: ed.model } } })
+      setMsg(`${AGENT_LIST.find((a) => a.key === funcKey)?.label} 已分配`)
+      await loadConfig()
+    } catch (e) {
+      setMsg('保存失败：' + (e as Error).message)
+    }
   }
 
   return (
@@ -97,63 +228,145 @@ export function SettingsPage() {
         {msg && <p className="text-xs text-ink3 mt-2">{msg}</p>}
       </section>
 
-      {/* AI 能力（可展开配置） */}
-      <section className="rounded-card border border-line p-4 space-y-1" style={{ background: 'var(--c-card)' }}>
-        <p className="text-xs text-ink3 mb-2">AI 能力（点击展开配置 API Key）</p>
-        {!config && token && <p className="text-xs text-ink3">正在加载配置…</p>}
-        {!config && !token && <p className="text-xs text-ink3">请先配置上方「连接」并测试连接</p>}
-        {config && AGENT_LIST.map((a) => {
-          const st = agentStatus(a.key)
-          const ed = edits[a.key]
-          const isOpen = expanded === a.key
-          return (
-            <div key={a.key}>
-              <button
-                onClick={() => setExpanded(isOpen ? null : a.key)}
-                className="w-full flex justify-between items-center py-1.5 text-sm cursor-pointer"
-              >
-                <span className="text-ink">{a.label}</span>
-                <span className="text-xs" style={{ color: st === 'on' ? 'var(--c-done)' : 'var(--c-ink3)' }}>
-                  {st === 'on' ? '● 已配' : '○ 未配'} {isOpen ? '▾' : '▸'}
-                </span>
-              </button>
-              {isOpen && ed && (
-                <div className="pl-2 pb-2 space-y-1.5">
-                  <input
-                    className="w-full rounded-pill border border-line px-3 py-1 text-xs text-ink"
-                    style={{ background: 'var(--c-bg)' }}
-                    placeholder="Base URL（如 https://open.bigmodel.cn/api/paas/v4）"
-                    value={ed.base_url}
-                    onChange={(e) => setEdits({ ...edits, [a.key]: { ...ed, base_url: e.target.value } })}
-                  />
-                  <input
-                    className="w-full rounded-pill border border-line px-3 py-1 text-xs text-ink"
-                    style={{ background: 'var(--c-bg)' }}
-                    placeholder="模型（如 glm-4-flash / gpt-4o-mini）"
-                    value={ed.model}
-                    onChange={(e) => setEdits({ ...edits, [a.key]: { ...ed, model: e.target.value } })}
-                  />
-                  <input
-                    type="password"
-                    className="w-full rounded-pill border border-line px-3 py-1 text-xs text-ink"
-                    style={{ background: 'var(--c-bg)' }}
-                    placeholder={st === 'on' ? '已配置（输入新值更换）' : 'API Key'}
-                    value={ed.api_key}
-                    onChange={(e) => setEdits({ ...edits, [a.key]: { ...ed, api_key: e.target.value } })}
-                  />
-                  <button
-                    className="rounded-pill px-3 py-1 text-xs text-bg"
-                    style={{ background: 'var(--c-accent)' }}
-                    onClick={() => saveAgent(a.key)}
-                  >
-                    保存配置
-                  </button>
+      {config && (
+        <>
+          {/* A) 模型供应商 */}
+          <section className="rounded-card border border-line p-4 space-y-2" style={{ background: 'var(--c-card)' }}>
+            <div className="flex justify-between items-center">
+              <p className="text-xs text-ink3">模型供应商（配一次，各功能共用）</p>
+              <button className="rounded-pill px-2.5 py-0.5 text-xs text-bg" style={{ background: 'var(--c-accent)' }} onClick={openNewProvider}>+ 添加供应商</button>
+            </div>
+
+            <div className="space-y-1.5">
+              {providerEntries().map((p) => (
+                <div key={p.id} className="rounded-pill border border-line px-3 py-2" style={{ background: 'var(--c-bg)' }}>
+                  <div className="flex justify-between items-center">
+                    <div className="min-w-0">
+                      <p className="text-sm text-ink truncate">{p.name}</p>
+                      <p className="text-[11px] text-ink3 truncate">{p.base_url}</p>
+                    </div>
+                    <div className="flex gap-1.5 shrink-0">
+                      <span className="text-[11px]" style={{ color: p.hasKey ? 'var(--c-done)' : 'var(--c-ink3)' }}>
+                        {p.hasKey ? '● 已配' : '○ 未配'}
+                      </span>
+                      <button className="text-[11px] text-ink2 underline" onClick={() => openEditProvider(p.id)}>编辑</button>
+                      <button className="text-[11px] text-ink2 underline" onClick={() => deleteProvider(p.id)}>删除</button>
+                    </div>
+                  </div>
                 </div>
+              ))}
+              {providerEntries().length === 0 && (
+                <p className="text-xs text-ink3">尚未配置供应商，点「添加供应商」开始。</p>
               )}
             </div>
-          )
-        })}
-      </section>
+
+            {/* 添加/编辑供应商表单 */}
+            {editingProvider !== null && (
+              <div className="mt-2 rounded-card border border-line p-3 space-y-1.5" style={{ background: 'var(--c-bg)' }}>
+                <p className="text-xs text-ink2">{editingProvider === '' ? '新增供应商' : '编辑供应商'}</p>
+                <input
+                  className="w-full rounded-pill border border-line px-3 py-1 text-xs text-ink"
+                  placeholder="名称（如 智谱GLM / DeepSeek）"
+                  value={providerForm.name}
+                  onChange={(e) => setProviderForm({ ...providerForm, name: e.target.value })}
+                />
+                <input
+                  className="w-full rounded-pill border border-line px-3 py-1 text-xs text-ink"
+                  placeholder="Base URL（如 https://open.bigmodel.cn/api/paas/v4）"
+                  value={providerForm.base_url}
+                  onChange={(e) => setProviderForm({ ...providerForm, base_url: e.target.value })}
+                />
+                <input
+                  type="password"
+                  className="w-full rounded-pill border border-line px-3 py-1 text-xs text-ink"
+                  placeholder={editingProvider !== '' ? '已配置（输入新值更换）' : 'API Key'}
+                  value={providerForm.api_key}
+                  onChange={(e) => setProviderForm({ ...providerForm, api_key: e.target.value })}
+                />
+                {detectedModels.length > 0 && (
+                  <div className="flex flex-wrap gap-1 py-1">
+                    {detectedModels.map((m) => (
+                      <span
+                        key={m}
+                        className="rounded-pill px-2 py-0.5 text-[11px] border border-line text-ink2"
+                        style={{ background: 'var(--c-card)' }}
+                      >
+                        {m}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {detectMsg && <p className="text-[11px] text-ink3">{detectMsg}</p>}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button className="rounded-pill border border-line px-2.5 py-1 text-[11px] text-ink2" onClick={detectModelsForForm}>检测可用模型</button>
+                  <button className="rounded-pill border border-line px-2.5 py-1 text-[11px] text-ink2" onClick={testConnectionForForm}>测试连接</button>
+                  <button className="rounded-pill px-2.5 py-1 text-[11px] text-bg" style={{ background: 'var(--c-accent)' }} onClick={saveProvider}>保存</button>
+                  <button className="rounded-pill px-2.5 py-1 text-[11px] text-ink2" onClick={() => setEditingProvider(null)}>取消</button>
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* B) 功能分配 */}
+          <section className="rounded-card border border-line p-4 space-y-2" style={{ background: 'var(--c-card)' }}>
+            <p className="text-xs text-ink3">功能分配（为每个功能选供应商 + 模型）</p>
+            {AGENT_LIST.map((a) => {
+              const ed = agentEdits[a.key] || { provider: '', model: '' }
+              const providerOptions = providerEntries()
+              const modelsForProvider = ed.provider ? (providerModels[ed.provider] || []) : []
+              return (
+                <div key={a.key} className="rounded-pill border border-line px-3 py-2 space-y-1.5" style={{ background: 'var(--c-bg)' }}>
+                  <p className="text-sm text-ink">{a.label}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <select
+                      className="rounded-pill border border-line px-2 py-1 text-xs text-ink"
+                      style={{ background: 'var(--c-card)' }}
+                      value={ed.provider}
+                      onChange={(e) => setAgentField(a.key, 'provider', e.target.value)}
+                    >
+                      <option value="">未选供应商</option>
+                      {providerOptions.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                    {modelsForProvider.length > 0 ? (
+                      <select
+                        className="rounded-pill border border-line px-2 py-1 text-xs text-ink flex-1 min-w-[8rem]"
+                        style={{ background: 'var(--c-card)' }}
+                        value={ed.model}
+                        onChange={(e) => setAgentField(a.key, 'model', e.target.value)}
+                      >
+                        <option value="">选模型</option>
+                        {modelsForProvider.map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        className="flex-1 min-w-[8rem] rounded-pill border border-line px-2 py-1 text-xs text-ink"
+                        style={{ background: 'var(--c-card)' }}
+                        placeholder="模型名（如 glm-4-flash）"
+                        value={ed.model}
+                        onChange={(e) => setAgentField(a.key, 'model', e.target.value)}
+                      />
+                    )}
+                    <button
+                      className="rounded-pill px-2.5 py-1 text-[11px] text-bg"
+                      style={{ background: 'var(--c-accent)' }}
+                      onClick={() => saveAgent(a.key)}
+                    >
+                      保存
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </section>
+        </>
+      )}
+
+      {!config && token && <p className="text-xs text-ink3">正在加载配置…</p>}
+      {!config && !token && <p className="text-xs text-ink3">请先配置上方「连接」并测试连接</p>}
 
       <p className="text-[11px] text-ink3 text-center">密钥仅存本地 secrets.local.json · 不入库不上传</p>
     </div>

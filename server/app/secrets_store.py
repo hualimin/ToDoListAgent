@@ -21,7 +21,8 @@ class AgentConfig(BaseModel):
 
 class SecretsFile(BaseModel):
     auth: dict = Field(default_factory=dict)          # {"access_token": "..."}
-    agents: dict[str, AgentConfig] = Field(default_factory=dict)
+    providers: dict = Field(default_factory=dict)     # {id: {name, base_url, api_key}} 凭据配一次
+    agents: dict = Field(default_factory=dict)        # {function: {provider: id, model: str}} 引用，无凭据
     notifications: dict = Field(default_factory=dict)  # {"email": {...}, "webhooks": [...]}
 
 
@@ -35,6 +36,10 @@ def load_secrets() -> SecretsFile:
         k: v for k, v in raw.get("agents", {}).items() if not k.startswith("_")
     }
     raw["agents"] = raw_agents
+    raw_providers = {
+        k: v for k, v in raw.get("providers", {}).items() if not k.startswith("_")
+    }
+    raw["providers"] = raw_providers
     return SecretsFile.model_validate(raw)
 
 

@@ -6,6 +6,7 @@ from pydantic import BaseModel, field_validator
 
 class ConfigUpdate(BaseModel):
     auth: dict[str, Any] | None = None
+    providers: dict[str, Any] | None = None
     agents: dict[str, Any] | None = None
     notifications: dict[str, Any] | None = None
 
@@ -95,3 +96,9 @@ class LearningPathResponse(BaseModel):
     title: str
     description: str = ""
     concepts: list[LearningConcept] = []
+
+class TestAgentRequest(BaseModel):
+    base_url: str
+    api_key: str
+    model: str | None = None
+

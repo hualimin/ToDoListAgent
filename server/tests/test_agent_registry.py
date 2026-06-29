@@ -6,16 +6,65 @@ from app.agent_registry import NotConfiguredError, call_agent
 from app.secrets_store import SecretsFile, save_secrets
 
 
-def _seed(monkeypatch, tmp_path, agents):
+def _seed(monkeypatch, tmp_path, agents, providers=None):
     p = tmp_path / "secrets.local.json"
     monkeypatch.setattr(config, "SECRETS_PATH", p)
-    save_secrets(SecretsFile(auth={"access_token": "t"}, agents=agents, notifications={}))
+    save_secrets(SecretsFile(
+        auth={"access_token": "t"},
+        providers=providers or {},
+        agents=agents,
+        notifications={},
+    ))
 
 
 def test_unconfigured_raises_not_configured(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path, agents={})
     with pytest.raises(NotConfiguredError):
         call_agent("task_parse", "hello")
+
+
+def test_call_resolves_through_providers(monkeypatch, tmp_path):
+    # 新结构：agents[func] = {provider, model}，凭据在 providers
+    _seed(monkeypatch, tmp_path, agents={"task_parse": {"provider": "zhipu", "model": "glm-4-flash"}},
+          providers={"zhipu": {"name": "智谱", "base_url": "https://open.bigmodel.cn/api/paas/v4", "api_key": "sk-zhipu"}})
+
+    captured = {}
+
+    def fake_post(url, *, headers, json, timeout):
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["json"] = json
+        return httpx.Response(200, request=httpx.Request("POST", url), json={"choices": [{"message": {"content": "PARSED"}}]})
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = call_agent("task_parse", "帮我解析：明天买牛奶")
+    assert result == "PARSED"
+    assert captured["url"] == "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+    assert captured["headers"]["Authorization"] == "Bearer sk-zhipu"
+    assert captured["json"]["model"] == "glm-4-flash"
+
+
+def test_call_resolves_legacy_embedded_config(monkeypatch, tmp_path):
+    # 旧结构兼容：agents[func] 内嵌 base_url/api_key
+    _seed(monkeypatch, tmp_path, agents={
+        "task_parse": {"provider": "openai", "base_url": "https://api.openai.com/v1",
+                       "model": "gpt-4o-mini", "api_key": "sk-test"}})
+
+    captured = {}
+
+    def fake_post(url, *, headers, json, timeout):
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["json"] = json
+        return httpx.Response(200, request=httpx.Request("POST", url), json={"choices": [{"message": {"content": "PARSED"}}]})
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = call_agent("task_parse", "帮我解析：明天买牛奶")
+    assert result == "PARSED"
+    assert captured["url"] == "https://api.openai.com/v1/chat/completions"
+    assert captured["headers"]["Authorization"] == "Bearer sk-test"
+    assert captured["json"]["model"] == "gpt-4o-mini"
+    assert captured["json"]["messages"][0]["content"] == "帮我解析：明天买牛奶"
 
 
 def test_call_uses_openai_compatible_endpoint(monkeypatch, tmp_path):

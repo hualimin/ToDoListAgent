@@ -12,7 +12,8 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "SECRETS_PATH", p)
     save_secrets(SecretsFile(
         auth={"access_token": "tok"},
-        agents={"task_parse": {"provider": "openai", "base_url": "u", "model": "m", "api_key": "sk-secret"}},
+        providers={"zhipu": {"name": "智谱", "base_url": "https://open.bigmodel.cn/api/paas/v4", "api_key": "sk-provider"}},
+        agents={"task_parse": {"provider": "zhipu", "model": "glm-4-flash"}},
         notifications={
             "email": {"smtp_host": "smtp.x.com", "smtp_pass": "pw"},
             "webhooks": [{"name": "Bark", "url": "https://api.day.app/SECRETKEY", "enabled": True}],
@@ -28,12 +29,44 @@ def test_get_masks_secrets(client):
     resp = client.get("/api/config", headers=HDR)
     assert resp.status_code == 200
     body = resp.json()
-    assert body["agents"]["task_parse"]["api_key"] == "***"
+    assert body["agents"]["task_parse"]["model"] == "glm-4-flash"
+    assert body["providers"]["zhipu"]["api_key"] == "***"
     assert body["notifications"]["email"]["smtp_pass"] == "***"
     assert body["auth"]["access_token"] == "***"
     # webhook URL 内含设备令牌，必须脱敏，不能回传 SECRETKEY
     assert body["notifications"]["webhooks"][0]["url"] == "***"
     assert "SECRETKEY" not in resp.text
+    assert "sk-provider" not in resp.text
+
+
+def test_put_null_value_deletes_key(client):
+    # 删除供应商：override 值为 null → 删除该 key
+    resp = client.put("/api/config", headers=HDR, json={"providers": {"zhipu": None}})
+    assert resp.status_code == 200
+    got = client.get("/api/config", headers=HDR).json()
+    assert "zhipu" not in got["providers"]
+
+
+def test_put_deep_merges_providers(client):
+    # 新增一个供应商，已有的 zhipu 不应被覆盖
+    resp = client.put("/api/config", headers=HDR, json={"providers": {"deepseek": {"name": "DeepSeek", "base_url": "https://api.deepseek.com/v1", "api_key": "sk-ds"}}})
+    assert resp.status_code == 200
+    got = client.get("/api/config", headers=HDR).json()
+    assert "deepseek" in got["providers"]
+    assert got["providers"]["deepseek"]["api_key"] == "***"
+    # 原 zhipu 保留
+    assert "zhipu" in got["providers"]
+    assert got["providers"]["zhipu"]["base_url"] == "https://open.bigmodel.cn/api/paas/v4"
+
+
+def test_put_assigns_agent_to_provider(client):
+    resp = client.put("/api/config", headers=HDR, json={"agents": {"urgency_rank": {"provider": "zhipu", "model": "glm-4-flash"}}})
+    assert resp.status_code == 200
+    got = client.get("/api/config", headers=HDR).json()
+    assert got["agents"]["urgency_rank"]["provider"] == "zhipu"
+    assert got["agents"]["urgency_rank"]["model"] == "glm-4-flash"
+    # 原 task_parse 保留
+    assert got["agents"]["task_parse"]["model"] == "glm-4-flash"
 
 
 def test_put_deep_merges_preserving_siblings(client):

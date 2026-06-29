@@ -22,20 +22,20 @@ def test_load_missing_raises(tmp_secrets):
 def test_save_then_load_roundtrip(tmp_secrets):
     data = SecretsFile(
         auth={"access_token": "tok-123"},
+        providers={
+            "zhipu": {"name": "智谱GLM", "base_url": "https://open.bigmodel.cn/api/paas/v4", "api_key": "sk-abc"},
+        },
         agents={
-            "task_parse": {
-                "provider": "openai",
-                "base_url": "https://api.openai.com/v1",
-                "model": "gpt-4o-mini",
-                "api_key": "sk-abc",
-            }
+            "task_parse": {"provider": "zhipu", "model": "glm-4-flash"},
         },
         notifications={},
     )
     save_secrets(data)
     loaded = load_secrets()
     assert loaded.auth["access_token"] == "tok-123"
-    assert loaded.agents["task_parse"].api_key == "sk-abc"
+    assert loaded.providers["zhipu"]["api_key"] == "sk-abc"
+    assert loaded.agents["task_parse"]["model"] == "glm-4-flash"
+    assert loaded.agents["task_parse"]["provider"] == "zhipu"
 
 
 def test_save_is_atomic(tmp_secrets):
@@ -52,7 +52,7 @@ def test_agents_ignores_underscore_meta_keys(tmp_secrets):
         "auth": {"access_token": "t"},
         "agents": {
             "_comment": "meta",
-            "task_parse": {"provider": "openai", "base_url": "u", "model": "m", "api_key": "k"},
+            "task_parse": {"provider": "zhipu", "model": "glm-4-flash"},
         },
         "notifications": {},
     }
@@ -60,6 +60,24 @@ def test_agents_ignores_underscore_meta_keys(tmp_secrets):
     loaded = load_secrets()
     assert "task_parse" in loaded.agents
     assert "_comment" not in loaded.agents
+
+
+def test_providers_ignores_underscore_meta_keys(tmp_secrets):
+    raw = {
+        "auth": {"access_token": "t"},
+        "providers": {
+            "_comment": "meta",
+            "_domestic_examples": {"deepseek": {"base_url": "u", "model": "m"}},
+            "zhipu": {"name": "智谱GLM", "base_url": "https://open.bigmodel.cn/api/paas/v4", "api_key": "sk"},
+        },
+        "agents": {},
+        "notifications": {},
+    }
+    tmp_secrets.write_text(json.dumps(raw), "utf-8")
+    loaded = load_secrets()
+    assert "zhipu" in loaded.providers
+    assert "_comment" not in loaded.providers
+    assert "_domestic_examples" not in loaded.providers
 
 
 def test_loads_real_example_file(tmp_secrets):
@@ -75,16 +93,18 @@ def test_loads_real_example_file(tmp_secrets):
     loaded = load_secrets()
 
     # 顶层 agents 的 _ 前缀元键被过滤掉
-    assert "_domestic_examples" not in loaded.agents
     assert "_comment" not in loaded.agents
     assert "_howto" not in loaded.agents
 
-    # 真实 Agent 条目可访问其实际字段（_role 等 _ 前缀元键不影响）
+    # providers 的 _ 前缀元键被过滤掉，但真实供应商条目保留
+    assert "_comment" not in loaded.providers
+    assert "_domestic_examples" not in loaded.providers
+    assert "zhipu_example" in loaded.providers
+    assert loaded.providers["zhipu_example"]["base_url"] == "https://open.bigmodel.cn/api/paas/v4"
+    assert loaded.providers["zhipu_example"]["api_key"] == "REPLACE_ME"
+
+    # agents 各功能条目可访问（{provider, model} 引用结构）
     assert "task_parse" in loaded.agents
-    assert loaded.agents["task_parse"].base_url == "https://api.openai.com/v1"
-    assert loaded.agents["task_parse"].api_key == "sk-REPLACE_ME"
-    assert loaded.agents["task_parse"].model == "gpt-4o-mini"
-    # 其他真实 agent 条目同样可解析
     assert "urgency_rank" in loaded.agents
     assert "researcher" in loaded.agents
-    assert loaded.agents["researcher"].model == "gpt-4o"
+    assert loaded.agents["task_parse"]["provider"] == ""
