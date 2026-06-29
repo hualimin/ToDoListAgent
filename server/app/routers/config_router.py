@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
+import httpx
 
-from app.schemas import ConfigUpdate
+from app.schemas import ConfigUpdate, TestAgentRequest
 from app.secrets_store import load_secrets, save_secrets, SecretsFile
 from app.security import require_user
 
@@ -21,8 +22,16 @@ def _mask(value):
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
-    """递归合并 override 进 base（同 key 且双方都是 dict 则深入合并，否则 override 覆盖）。"""
+    """递归合并 override 进 base。
+
+    - 同 key 且双方都是 dict → 深入合并。
+    - override 值为 None → 删除 base 中该 key（删除语义）。
+    - 否则 override 覆盖 base。
+    """
     for k, v in (override or {}).items():
+        if v is None:
+            base.pop(k, None)
+            continue
         if isinstance(v, dict) and isinstance(base.get(k), dict):
             _deep_merge(base[k], v)
         else:
@@ -43,7 +52,7 @@ def get_config(user_id: int = Depends(require_user)):
 @router.put("")
 def put_config(update: ConfigUpdate, user_id: int = Depends(require_user)):
     current = load_secrets().model_dump()
-    for field in ("auth", "agents", "notifications"):
+    for field in ("auth", "providers", "agents", "notifications"):
         new_val = getattr(update, field)
         if new_val is not None:
             current[field] = _deep_merge(current.get(field, {}) or {}, new_val)
@@ -52,3 +61,40 @@ def put_config(update: ConfigUpdate, user_id: int = Depends(require_user)):
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"配置校验失败: {e}")
     return {"ok": True}
+
+
+@router.post("/test-agent")
+def test_agent(req: TestAgentRequest, user_id: int = Depends(require_user)):
+    """测试 AI Agent 配置：列出可用模型 + 验证连接。"""
+    base = req.base_url.rstrip("/")
+    headers = {"Authorization": f"Bearer {req.api_key}", "Content-Type": "application/json"}
+
+    # 1. 检测可用模型
+    models = []
+    try:
+        resp = httpx.get(f"{base}/models", headers=headers, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            models = sorted([m.get("id", str(m)) for m in data.get("data", data.get("models", []))])
+    except Exception:
+        pass
+
+    # 2. 测试连接（发一条最小消息）
+    test_model = req.model or (models[0] if models else "")
+    test_ok = False
+    message = ""
+    if not test_model:
+        message = "未指定模型且无法获取模型列表，请手动填写模型名"
+    else:
+        try:
+            payload = {"model": test_model, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 5}
+            resp = httpx.post(f"{base}/chat/completions", headers=headers, json=payload, timeout=15)
+            if resp.status_code == 200:
+                test_ok = True
+                message = f"✅ 连接成功，模型 {test_model} 可用"
+            else:
+                message = f"❌ API 返回 {resp.status_code}：{resp.text[:200]}"
+        except Exception as e:
+            message = f"❌ 连接失败：{type(e).__name__}: {e}"
+
+    return {"ok": test_ok, "message": message, "models": models}
