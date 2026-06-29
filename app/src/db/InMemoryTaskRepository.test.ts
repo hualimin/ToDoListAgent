@@ -53,4 +53,24 @@ describe('InMemoryTaskRepository', () => {
     expect((await repo.getById(t.id))?.title).toBe('a')
     expect(await repo.getById('missing')).toBeNull()
   })
+
+  it('create 的 board_order 为 max+1（软删后不冲突）', async () => {
+    const a = await repo.create({ title: 'a' })          // order 1
+    const b = await repo.create({ title: 'b' })          // order 2
+    await repo.softDelete(a.id)                          // a 软删，仍在 map
+    const c = await repo.create({ title: 'c' })          // order 应为 3，非 items.size(=2)
+    expect(c.board_order).toBe(3)
+    expect(b.board_order).toBe(2)
+  })
+
+  it('reorder 用中点插入', async () => {
+    const a = await repo.create({ title: 'a' }) // order 1
+    const b = await repo.create({ title: 'b' }) // order 2
+    const c = await repo.create({ title: 'c' }) // order 3
+    // 把 c 插到 a 前面（insertIndex 0）：midpoint(0,1)=0.5
+    await repo.reorder(c.id, [1, 2, 3], 0)
+    const got = await repo.getById(c.id)
+    expect(got?.board_order).toBe(0.5)
+    expect(got?.sync_state).toBe('pending_up')
+  })
 })

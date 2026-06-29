@@ -1,5 +1,6 @@
 import type { TaskRepository } from './TaskRepository'
 import type { Task, TaskCreateInput, TaskPatch } from './types'
+import { orderForInsert } from '../lib/boardOrder'
 
 function now(): string {
   return new Date().toISOString()
@@ -12,6 +13,12 @@ export class InMemoryTaskRepository implements TaskRepository {
   private uid(): string {
     this.seq += 1
     return `t-${Date.now().toString(36)}-${this.seq}`
+  }
+
+  private maxOrder(): number {
+    let m = 0
+    for (const t of this.items.values()) if (t.board_order > m) m = t.board_order
+    return m
   }
 
   async getAll(): Promise<Task[]> {
@@ -35,7 +42,7 @@ export class InMemoryTaskRepository implements TaskRepository {
       status: 'todo',
       due_at: input.due_at ?? null,
       scheduled_at: input.scheduled_at ?? null,
-      board_order: this.items.size,
+      board_order: this.maxOrder() + 1,
       created_at: now(),
       updated_at: now(),
       deleted_at: null,
@@ -66,6 +73,16 @@ export class InMemoryTaskRepository implements TaskRepository {
     const cur = this.items.get(id)
     if (!cur) return
     this.items.set(id, { ...cur, deleted_at: now(), sync_state: 'pending_up' })
+  }
+
+  async reorder(id: string, sortedOrders: number[], insertIndex: number): Promise<void> {
+    const cur = this.items.get(id)
+    if (!cur) return
+    const maxOrder = this.maxOrder()
+    cur.board_order = orderForInsert(sortedOrders, insertIndex, maxOrder)
+    cur.updated_at = now()
+    cur.sync_state = 'pending_up'
+    this.items.set(id, cur)
   }
 
   async getPendingUp(): Promise<Task[]> {

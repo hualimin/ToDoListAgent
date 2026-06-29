@@ -4,12 +4,18 @@ export type Range = 'today' | 'week' | 'month' | 'all'
 export function withinRange(t: Task, range: Range, now = new Date()): boolean {
   if (range === 'all') return true
   const due = t.due_at ? new Date(t.due_at) : null
-  if (!due) return false
-  const ms = now.getTime() - due.getTime()
-  const day = 86400000
-  if (range === 'today') return Math.abs(ms) < day && due.toDateString() === now.toDateString()
-  if (range === 'week') return ms <= 0 && ms > -7 * day
-  if (range === 'month') return ms <= 0 && ms > -30 * day
+  if (!due) return false // 无截止不进 today/week/month
+  const dueDay = new Date(due); dueDay.setHours(0, 0, 0, 0)
+  const today = new Date(now); today.setHours(0, 0, 0, 0)
+  const diffDays = Math.floor((dueDay.getTime() - today.getTime()) / 86400000)
+  if (range === 'today') return diffDays <= 0 // 今天或逾期
+  if (range === 'week') {
+    const dow = now.getDay() === 0 ? 6 : now.getDay() - 1 // 周一=0
+    const monday = new Date(today); monday.setDate(today.getDate() - dow)
+    const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6)
+    return dueDay >= monday && dueDay <= sunday // 本周（按日历周，含已过的天）
+  }
+  if (range === 'month') return dueDay.getFullYear() === today.getFullYear() && dueDay.getMonth() === today.getMonth()
   return true
 }
 

@@ -13,5 +13,6 @@ export class SqliteTaskRepository implements TaskRepository {
   async create(_input: TaskCreateInput): Promise<Task> { throw new Error('SqliteTaskRepository: native-only (未实现)') }
   async update(_id: string, _patch: TaskPatch): Promise<Task> { throw new Error('SqliteTaskRepository: native-only (未实现)') }
   async softDelete(_id: string): Promise<void> { throw new Error('SqliteTaskRepository: native-only (未实现)') }
+  async reorder(_id: string, _sortedOrders: number[], _insertIndex: number): Promise<void> { throw new Error('SqliteTaskRepository: native-only (未实现)') }
   async getPendingUp(): Promise<Task[]> { throw new Error('SqliteTaskRepository: native-only (未实现)') }
 }
