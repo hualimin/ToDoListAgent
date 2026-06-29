@@ -63,7 +63,7 @@ export function InputBar() {
     <div className="mb-3">
       <div className="flex gap-1.5 mb-2">
         <ModeBtn on={mode === 'text'} onClick={() => setMode('text')} label="文字" icon="✏️" />
-        {speech.supported && <ModeBtn on={mode === 'voice'} onClick={() => { setMode('voice'); speech.start() }} label="语音" icon="🎤" />}
+        {speech.supported && <ModeBtn on={mode === 'voice'} onClick={() => setMode('voice')} label="语音" icon="🎤" />}
         <ModeBtn on={mode === 'photo'} onClick={() => setMode('photo')} label="照片" icon="📷" />
       </div>
 
@@ -75,10 +75,13 @@ export function InputBar() {
       )}
 
       {mode === 'voice' && (
-        <div className="flex gap-2 items-center">
-          <button className="rounded-pill px-3 py-1.5 text-sm" style={{ background: speech.listening ? 'var(--c-urgent)' : 'var(--c-card)', color: speech.listening ? '#fff' : 'var(--c-ink2)', border: '1px solid var(--c-line)' }} onClick={() => speech.listening ? speech.stop() : speech.start()}>{speech.listening ? '🛑 停止' : '🎤 开始'}</button>
-          <span className="flex-1 text-sm text-ink2 truncate">{speech.transcript || '说点什么…'}</span>
-          <button className="rounded-pill px-3 py-1.5 text-sm text-bg" style={{ background: 'var(--c-accent)' }} onClick={() => { submit('voice', speech.transcript); speech.reset() }} disabled={busy || !speech.transcript}>添加</button>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex gap-2 items-center">
+            <button className="rounded-pill px-3 py-1.5 text-sm" style={{ background: speech.listening ? 'var(--c-urgent)' : 'var(--c-card)', color: speech.listening ? '#fff' : 'var(--c-ink2)', border: '1px solid var(--c-line)' }} onClick={() => speech.listening ? speech.stop() : speech.start()}>{speech.listening ? '🛑 停止聆听' : '🎤 开始说话'}</button>
+            <span className="flex-1 text-sm text-ink2 truncate">{speech.transcript || (speech.listening ? '正在聆听…' : '点击开始说话')}</span>
+            <button className="rounded-pill px-3 py-1.5 text-sm text-bg" style={{ background: 'var(--c-accent)' }} onClick={() => { submit('voice', speech.transcript); speech.reset() }} disabled={busy || !speech.transcript}>添加</button>
+          </div>
+          {speech.error && <p className="text-xs text-urgent">{speech.error}</p>}
         </div>
       )}
 

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { useLearningStore } from '../store/learningStore'
 import { createApiClient } from '../api/client'
@@ -18,6 +19,7 @@ function genId(): string {
 }
 
 export function LearningPathForm({ onCreated }: Props) {
+  const navigate = useNavigate()
   const baseURL = useAuthStore((s) => s.baseURL)
   const token = useAuthStore((s) => s.token)
   const addPath = useLearningStore((s) => s.addPath)
@@ -190,7 +192,7 @@ export function LearningPathForm({ onCreated }: Props) {
           {busy ? '生成中…' : '生成路径'}
         </button>
         {!token && (
-          <span className="text-xs text-ink3 self-center">未配置令牌，将创建空路径</span>
+          <button onClick={() => navigate('/settings')} className="text-xs text-accent self-center underline cursor-pointer">未配置令牌，去设置 →</button>
         )}
       </div>
 

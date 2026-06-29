@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { ThemeProvider } from '../themes/ThemeProvider'
 import { LearnPage } from '../pages/LearnPage'
 import { LearningPathForm } from '../components/LearningPathForm'
@@ -9,7 +10,7 @@ import { useAuthStore } from '../store/authStore'
 import type { Concept, LearningPath } from '../db/learningTypes'
 
 function renderUI(node: React.ReactNode) {
-  return render(<ThemeProvider>{node}</ThemeProvider>)
+  return render(<MemoryRouter><ThemeProvider>{node}</ThemeProvider></MemoryRouter>)
 }
 
 function sampleConcept(over: Partial<Concept> = {}): Concept {

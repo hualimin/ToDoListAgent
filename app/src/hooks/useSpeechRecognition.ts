@@ -19,6 +19,7 @@ export function useSpeechRecognition(lang = 'zh-CN') {
   )
   const [listening, setListening] = useState(false)
   const [transcript, setTranscript] = useState('')
+  const [error, setError] = useState('')
   const recRef = useRef<SpeechRecognitionLike | null>(null)
 
   const getRec = useCallback((): SpeechRecognitionLike | null => {
@@ -34,18 +35,31 @@ export function useSpeechRecognition(lang = 'zh-CN') {
       for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript
       setTranscript(txt)
     }
-    rec.onerror = () => setListening(false)
+    rec.onerror = (e: any) => {
+      setListening(false)
+      const errType = e?.error || ''
+      if (errType === 'not-allowed' || errType === 'service-not-allowed') setError('麦克风权限被拒绝，请在浏览器设置中允许')
+      else if (errType === 'no-speech') setError('未检测到语音，请再试一次')
+      else if (errType === 'network') setError('网络错误，语音识别需要联网')
+      else setError('语音识别出错：' + errType)
+    }
     rec.onend = () => setListening(false)
     return rec
   }, [supported, lang])
 
   const start = useCallback(() => {
+    setError('')
     const rec = getRec()
     if (!rec) return
-    setTranscript('')
-    setListening(true)
-    rec.start()
-    recRef.current = rec
+    try {
+      setTranscript('')
+      setListening(true)
+      rec.start()
+      recRef.current = rec
+    } catch {
+      setListening(false)
+      setError('启动语音识别失败，可能已在运行中')
+    }
   }, [getRec])
   const stop = useCallback(() => {
     recRef.current?.stop()
@@ -54,9 +68,10 @@ export function useSpeechRecognition(lang = 'zh-CN') {
   const reset = useCallback(() => {
     setTranscript('')
     setListening(false)
+    setError('')
   }, [])
 
   useEffect(() => () => { recRef.current?.stop() }, [])
 
-  return { supported, listening, transcript, start, stop, reset }
+  return { supported, listening, transcript, error, start, stop, reset }
 }
