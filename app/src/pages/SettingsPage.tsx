@@ -322,36 +322,36 @@ export function SettingsPage() {
                   >Anthropic</button>
                 </div>
                 {detectedModels.length > 0 && (
-                  <div className="flex flex-wrap gap-1 py-1">
-                    {detectedModels.map((m) => (
-                      <button
-                        key={m}
-                        onClick={() => {
-                          setSelectedModel(m)
-                          setProviderForm({ ...providerForm, model: m })
-                        }}
-                        className="rounded-pill px-2 py-0.5 text-[11px] border cursor-pointer"
-                        style={
-                          selectedModel === m
-                            ? { background: 'var(--c-accent)', color: 'var(--c-bg)', borderColor: 'var(--c-accent)' }
-                            : { background: 'var(--c-card)', color: 'var(--c-ink2)', borderColor: 'var(--c-line)' }
-                        }
-                      >
-                        {m}
-                      </button>
-                    ))}
+                  <div className="space-y-1">
+                    <span className="text-[11px] text-ink3">✅ 检测到 {detectedModels.length} 个模型，请选择：</span>
+                    <select
+                      className="w-full rounded-pill border border-line px-3 py-1.5 text-xs text-ink cursor-pointer"
+                      style={{ background: 'var(--c-bg)' }}
+                      value={selectedModel || ''}
+                      onChange={(e) => {
+                        setSelectedModel(e.target.value)
+                        setProviderForm({ ...providerForm, model: e.target.value })
+                      }}
+                    >
+                      <option value="">— 选择模型 —</option>
+                      {detectedModels.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
                   </div>
                 )}
-                <input
-                  className="w-full rounded-pill border border-line px-3 py-1 text-xs text-ink"
-                  style={{ background: 'var(--c-bg)' }}
-                  placeholder="或手动输入模型名（如 glm-4-flash）"
-                  value={selectedModel || providerForm.model || ''}
-                  onChange={(e) => {
-                    setSelectedModel(e.target.value)
-                    setProviderForm({ ...providerForm, model: e.target.value })
-                  }}
-                />
+                {detectedModels.length === 0 && (
+                  <input
+                    className="w-full rounded-pill border border-line px-3 py-1 text-xs text-ink"
+                    style={{ background: 'var(--c-bg)' }}
+                    placeholder="手动输入模型名（如 glm-4-flash）"
+                    value={selectedModel || providerForm.model || ''}
+                    onChange={(e) => {
+                      setSelectedModel(e.target.value)
+                      setProviderForm({ ...providerForm, model: e.target.value })
+                    }}
+                  />
+                )}
                 <p className="text-[10px] text-ink3 leading-relaxed">
                   ① 填 Base URL + API Key → ② 检测模型 → ③ 选模型 → ④ 测试 → ⑤ 保存
                 </p>
