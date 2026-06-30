@@ -17,7 +17,7 @@ function ui() {
 }
 
 describe('InputBar', () => {
-  it('文字模式输入+添加 → 创建任务', async () => {
+  it('文字输入+添加 → 创建任务', async () => {
     ui()
     await userEvent.type(screen.getByPlaceholderText('记一笔待办…'), '买牛奶')
     await userEvent.click(screen.getByRole('button', { name: '添加' }))
@@ -26,12 +26,10 @@ describe('InputBar', () => {
   })
   it('语音按钮在 jsdom 不支持时隐藏', () => {
     ui()
-    // jsdom 无 SpeechRecognition → 不渲染语音按钮
-    expect(screen.queryByText('语音')).toBeNull()
+    expect(screen.queryByTitle('语音输入')).toBeNull()
   })
-  it('照片模式有选图按钮', async () => {
+  it('统一栏有照片上传按钮', () => {
     ui()
-    await userEvent.click(screen.getByRole('button', { name: /照片/ }))
-    expect(screen.getByText('选图')).toBeInTheDocument()
+    expect(screen.getByTitle('上传图片')).toBeInTheDocument()
   })
 })

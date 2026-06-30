@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useTaskStore } from '../store/taskStore'
 import { useAuthStore } from '../store/authStore'
 import { createApiClient } from '../api/client'
@@ -6,45 +6,45 @@ import { compressImage } from '../lib/imageCompress'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import type { InputSource } from '../db/types'
 
-type Mode = 'text' | 'voice' | 'photo'
-
 export function InputBar() {
   const createTask = useTaskStore((s) => s.createTask)
   const baseURL = useAuthStore((s) => s.baseURL)
   const token = useAuthStore((s) => s.token)
-  const [mode, setMode] = useState<Mode>('text')
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [imageB64, setImageB64] = useState<string | null>(null)
+  const [usedVoice, setUsedVoice] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const speech = useSpeechRecognition()
 
-  async function submit(source: InputSource, submitText: string) {
-    if (!submitText.trim() && !imageB64) return
+  // 语音转写结果实时填入文字框
+  useEffect(() => {
+    if (speech.transcript) {
+      setText(speech.transcript)
+      setUsedVoice(true)
+    }
+  }, [speech.transcript])
+
+  async function submit() {
+    if (!text.trim() && !imageB64) return
+    const source: InputSource = imageB64 ? 'photo' : usedVoice ? 'voice' : 'text'
     setBusy(true)
     setMsg('解析中…')
     try {
-      let parsed = {
-        title: submitText.trim() || '新任务',
-        content: '',
-        urgency: 'normal' as const,
-        due_at: null as string | null,
-      }
+      let parsed = { title: text.trim() || '新任务', content: '', urgency: 'normal' as const, due_at: null as string | null }
       if (token) {
         const api = createApiClient({ baseURL, token })
         const resp = await api.post<{ title: string; content: string; urgency: string; due_at: string | null }>('/api/tasks/parse', {
-          text: submitText.trim() || undefined,
-          image_base64: imageB64 || undefined,
+          text: text.trim() || undefined, image_base64: imageB64 || undefined,
         })
         parsed = { title: resp.title, content: resp.content, urgency: resp.urgency as 'normal', due_at: resp.due_at }
       }
       await createTask({ title: parsed.title, content: parsed.content, urgency: parsed.urgency, due_at: parsed.due_at, input_source: source, image_data: imageB64 })
-      setText(''); setImageB64(null); setImagePreview(null); setMsg('')
+      setText(''); setImageB64(null); setImagePreview(null); setUsedVoice(false); speech.reset(); setMsg('')
     } catch {
-      // 降级：用原文创建
-      await createTask({ title: submitText.trim() || '新任务', input_source: source, image_data: imageB64 })
+      await createTask({ title: text.trim() || '新任务', input_source: source, image_data: imageB64 })
       setMsg('AI 解析失败，已用原文创建')
     } finally {
       setBusy(false)
@@ -59,49 +59,84 @@ export function InputBar() {
     setImagePreview(b64)
   }
 
+  function toggleVoice() {
+    if (speech.listening) {
+      speech.stop()
+    } else {
+      setText('')
+      setUsedVoice(false)
+      speech.start()
+    }
+  }
+
   return (
     <div className="mb-3">
-      <div className="flex gap-1.5 mb-2">
-        <ModeBtn on={mode === 'text'} onClick={() => setMode('text')} label="文字" icon="✏️" />
-        {speech.supported && <ModeBtn on={mode === 'voice'} onClick={() => setMode('voice')} label="语音" icon="🎤" />}
-        <ModeBtn on={mode === 'photo'} onClick={() => setMode('photo')} label="照片" icon="📷" />
+      {/* 图片预览（有图时显示，可删除） */}
+      {imagePreview && (
+        <div className="relative mb-2 inline-block">
+          <img src={imagePreview} alt="预览" className="rounded-card border border-line max-h-28 object-cover" />
+          <button
+            onClick={() => { setImageB64(null); setImagePreview(null) }}
+            className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center text-xs"
+            style={{ background: 'var(--c-urgent)', color: '#fff' }}
+          >✕</button>
+        </div>
+      )}
+
+      {/* 统一输入行 */}
+      <div className="flex gap-1.5 items-center">
+        {/* 文字输入框（常驻） */}
+        <input
+          className="flex-1 rounded-pill border border-line bg-card px-3 py-2 text-sm text-ink min-w-0"
+          placeholder={speech.listening ? '正在聆听…' : '记一笔待办…'}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() } }}
+          disabled={busy}
+        />
+
+        {/* 语音按钮（转写结果填入文字框） */}
+        {speech.supported && (
+          <button
+            onClick={toggleVoice}
+            disabled={busy}
+            className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-sm cursor-pointer"
+            style={{
+              background: speech.listening ? 'var(--c-urgent)' : 'var(--c-card)',
+              color: speech.listening ? '#fff' : 'var(--c-ink2)',
+              border: '1px solid var(--c-line)',
+            }}
+            title={speech.listening ? '停止聆听' : '语音输入'}
+          >
+            {speech.listening ? '🛑' : '🎤'}
+          </button>
+        )}
+
+        {/* 照片按钮（选图后显示预览，不隐藏文字框） */}
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={busy}
+          className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-sm cursor-pointer"
+          style={{ background: 'var(--c-card)', color: 'var(--c-ink2)', border: '1px solid var(--c-line)' }}
+          title="上传图片"
+        >📷</button>
+
+        {/* 添加按钮 */}
+        <button
+          onClick={submit}
+          disabled={busy || (!text.trim() && !imageB64)}
+          className="shrink-0 rounded-pill px-4 py-2 text-sm text-bg font-semibold"
+          style={{ background: 'var(--c-accent)' }}
+        >添加</button>
       </div>
 
-      {mode === 'text' && (
-        <div className="flex gap-2">
-          <input className="flex-1 rounded-pill border border-line bg-card px-3 py-1.5 text-sm text-ink" placeholder="记一笔待办…" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submit('text', text) }} disabled={busy} />
-          <button className="rounded-pill px-4 py-1.5 text-sm text-bg" style={{ background: 'var(--c-accent)' }} onClick={() => submit('text', text)} disabled={busy}>添加</button>
-        </div>
-      )}
-
-      {mode === 'voice' && (
-        <div className="flex flex-col gap-1.5">
-          <div className="flex gap-2 items-center">
-            <button className="rounded-pill px-3 py-1.5 text-sm" style={{ background: speech.listening ? 'var(--c-urgent)' : 'var(--c-card)', color: speech.listening ? '#fff' : 'var(--c-ink2)', border: '1px solid var(--c-line)' }} onClick={() => speech.listening ? speech.stop() : speech.start()}>{speech.listening ? '🛑 停止聆听' : '🎤 开始说话'}</button>
-            <span className="flex-1 text-sm text-ink2 truncate">{speech.transcript || (speech.listening ? '正在聆听…' : '点击开始说话')}</span>
-            <button className="rounded-pill px-3 py-1.5 text-sm text-bg" style={{ background: 'var(--c-accent)' }} onClick={() => { submit('voice', speech.transcript); speech.reset() }} disabled={busy || !speech.transcript}>添加</button>
-          </div>
-          {speech.error && <p className="text-xs text-urgent">{speech.error}</p>}
-        </div>
-      )}
-
-      {mode === 'photo' && (
-        <div className="flex flex-col gap-2">
-          <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
-          {imagePreview && <img src={imagePreview} alt="预览" className="rounded-card border border-line max-h-32 object-cover" />}
-          <div className="flex gap-2">
-            <input className="flex-1 rounded-pill border border-line bg-card px-3 py-1.5 text-sm text-ink" placeholder="补充描述（可选）…" value={text} onChange={(e) => setText(e.target.value)} disabled={busy} />
-            <button className="rounded-pill px-3 py-1.5 text-sm border-line" style={{ background: 'var(--c-card)', color: 'var(--c-ink2)', border: '1px solid var(--c-line)' }} onClick={() => fileRef.current?.click()} disabled={busy}>选图</button>
-            <button className="rounded-pill px-4 py-1.5 text-sm text-bg" style={{ background: 'var(--c-accent)' }} onClick={() => submit('photo', text)} disabled={busy || !imageB64}>添加</button>
-          </div>
-        </div>
-      )}
-
+      {/* 状态提示 */}
+      {speech.listening && <p className="text-xs text-accent mt-1">🎤 正在聆听…说完点🛑停止</p>}
+      {speech.error && <p className="text-xs mt-1" style={{ color: 'var(--c-urgent)' }}>{speech.error}</p>}
       {msg && <p className="text-xs text-ink3 mt-1">{msg}</p>}
+
+      {/* 隐藏的文件选择器 */}
+      <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
     </div>
   )
-}
-
-function ModeBtn({ on, onClick, label, icon }: { on: boolean; onClick: () => void; label: string; icon: string }) {
-  return <button onClick={onClick} className="px-3 py-1 rounded-pill text-xs" style={{ background: on ? 'var(--c-accent)' : 'var(--c-card)', color: on ? 'var(--c-bg)' : 'var(--c-ink2)', border: '1px solid var(--c-line)' }}>{icon} {label}</button>
 }
