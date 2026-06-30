@@ -23,34 +23,45 @@ def call_openai(base_url: str, api_key: str, model: str, content, *, timeout: fl
 def call_anthropic(base_url: str, api_key: str, model: str, content, *, timeout: float = 30.0, max_tokens: int = 1024) -> str:
     """Anthropic 兼容格式：POST {base_url}/messages
 
-    差异：
-    - URL: /messages（非 /chat/completions）
-    - Auth: x-api-key + anthropic-version header（非 Bearer）
-    - max_tokens 必填
-    - 响应: content[0].text（非 choices[0].message.content）
-    - 图片格式: {type:"image", source:{type:"base64", media_type, data}}（非 image_url）
+    自动尝试多种路径（/messages, /v1/messages），用户填的 URL 带不带 /v1 都行。
     """
-    url = base_url.rstrip("/") + "/messages"
     headers = {
         "x-api-key": api_key,
         "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
     }
-    # 转换 content 为 Anthropic 格式
     anthropic_content = _to_anthropic_content(content)
     payload = {
         "model": model,
         "max_tokens": max_tokens,
         "messages": [{"role": "user", "content": anthropic_content}],
     }
-    resp = httpx.post(url, headers=headers, json=payload, timeout=timeout)
-    resp.raise_for_status()
-    data = resp.json()
-    # Anthropic 响应: {content: [{type: "text", text: "..."}]}
-    for block in data.get("content", []):
-        if block.get("type") == "text":
-            return block["text"]
-    return ""
+    base = base_url.rstrip("/")
+    # 尝试多种路径
+    candidate_urls = [base + "/messages"]
+    if not base.endswith("/v1"):
+        candidate_urls.append(base + "/v1/messages")
+
+    last_error = None
+    for url in candidate_urls:
+        try:
+            resp = httpx.post(url, headers=headers, json=payload, timeout=timeout)
+            if resp.status_code == 200:
+                data = resp.json()
+                for block in data.get("content", []):
+                    if block.get("type") == "text":
+                        return block["text"]
+                return ""
+            elif resp.status_code != 404:
+                # 非 404 错误（如 401 鉴权失败）直接报错，不重试
+                resp.raise_for_status()
+            last_error = f"{url} → {resp.status_code}"
+        except httpx.HTTPStatusError:
+            raise
+        except Exception as e:
+            last_error = str(e)
+            continue
+    raise ConnectionError(f"Anthropic API 请求失败（尝试了 {len(candidate_urls)} 个路径）：{last_error}")
 
 
 def _to_anthropic_content(content) -> list[dict]:
@@ -99,18 +110,34 @@ def call_llm(base_url: str, api_key: str, model: str, content, *, fmt: str = "op
 
 
 def fetch_models(base_url: str, api_key: str, *, fmt: str = "openai", timeout: float = 10.0) -> list[str]:
-    """获取可用模型列表。Anthropic 用 x-api-key，OpenAI 用 Bearer。"""
-    url = base_url.rstrip("/") + "/models"
+    """获取可用模型列表。自动尝试多种路径（/models, /v1/models 等）。
+    Anthropic 用 x-api-key，OpenAI 用 Bearer。"""
     if fmt == "anthropic":
         headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01"}
     else:
         headers = {"Authorization": f"Bearer {api_key}"}
-    try:
-        resp = httpx.get(url, headers=headers, timeout=timeout)
-        if resp.status_code == 200:
-            data = resp.json()
-            models = data.get("data", data.get("models", []))
-            return sorted([m.get("id", str(m)) for m in models])
-    except Exception:
-        pass
+
+    base = base_url.rstrip("/")
+    # 自动尝试多种路径：原始、/v1/models、/models
+    # 场景：用户填 .../anthropic（实际需要 .../anthropic/v1）
+    candidate_urls = []
+    if not base.endswith("/models"):
+        candidate_urls.append(base + "/models")
+    # 如果 base 不以 /v1 结尾，也试 /v1/models
+    v1_base = base.rstrip("/v1") if base.endswith("/v1") else base
+    if not v1_base.endswith("/v1"):
+        candidate_urls.append(v1_base + "/v1/models")
+    # 如果以 /v1 结尾，直接 /models 已经在上面加了
+
+    for url in candidate_urls:
+        try:
+            resp = httpx.get(url, headers=headers, timeout=timeout)
+            if resp.status_code == 200:
+                data = resp.json()
+                models = data.get("data", data.get("models", []))
+                result = sorted([m.get("id", str(m)) for m in models])
+                if result:
+                    return result
+        except Exception:
+            continue
     return []
