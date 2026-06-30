@@ -14,9 +14,10 @@ class NotConfiguredError(RuntimeError):
 
 class AgentConfig(BaseModel):
     provider: str = "openai"
-    base_url: str
-    model: str
-    api_key: str
+    base_url: str = ""
+    model: str = ""
+    api_key: str = ""
+    format: str = "openai"  # "openai" 或 "anthropic"
 
 
 class SecretsFile(BaseModel):

@@ -65,10 +65,13 @@ def put_config(update: ConfigUpdate, user_id: int = Depends(require_user)):
 
 @router.post("/test-agent")
 def test_agent(req: TestAgentRequest, user_id: int = Depends(require_user)):
-    """测试 AI Agent 配置：列出可用模型 + 验证连接。
-    如果 api_key 为空但 provider_id 给了，从已存配置读 Key。"""
+    """测试 AI Agent 配置：列出可用模型 + 验证连接（自动适配 OpenAI/Anthropic 格式）。
+    如果 api_key 为空但 provider_id 给了，从已存配置读 Key + format。"""
+    from app.llm_adapter import call_llm, fetch_models
+
     base = req.base_url.rstrip("/")
     api_key = req.api_key
+    fmt = req.format or "openai"
 
     # api_key 为空时，尝试从已存配置加载（编辑已有供应商的场景）
     if not api_key and req.provider_id:
@@ -76,6 +79,7 @@ def test_agent(req: TestAgentRequest, user_id: int = Depends(require_user)):
             secrets = load_secrets()
             provider = (secrets.providers or {}).get(req.provider_id, {})
             api_key = provider.get("api_key", "")
+            fmt = provider.get("format", "openai")
             if not base:
                 base = provider.get("base_url", "").rstrip("/")
         except Exception:
@@ -84,34 +88,21 @@ def test_agent(req: TestAgentRequest, user_id: int = Depends(require_user)):
     if not base or not api_key:
         return {"ok": False, "message": "❌ 缺少 Base URL 或 API Key（新供应商需填入 Key）", "models": []}
 
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-
-    # 1. 检测可用模型
-    models = []
-    try:
-        resp = httpx.get(f"{base}/models", headers=headers, timeout=10)
-        if resp.status_code == 200:
-            data = resp.json()
-            models = sorted([m.get("id", str(m)) for m in data.get("data", data.get("models", []))])
-    except Exception:
-        pass
+    # 1. 检测可用模型（自动适配格式）
+    models = fetch_models(base, api_key, fmt=fmt)
 
     # 2. 测试连接（发一条最小消息）
     test_model = req.model or (models[0] if models else "")
     test_ok = False
     message = ""
     if not test_model:
-        message = "未指定模型且无法获取模型列表，请手动填写模型名"
+        message = "请先输入模型名再测试连接"
     else:
         try:
-            payload = {"model": test_model, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 5}
-            resp = httpx.post(f"{base}/chat/completions", headers=headers, json=payload, timeout=15)
-            if resp.status_code == 200:
-                test_ok = True
-                message = f"✅ 连接成功，模型 {test_model} 可用"
-            else:
-                message = f"❌ API 返回 {resp.status_code}：{resp.text[:200]}"
+            result = call_llm(base, api_key, test_model, "hi", fmt=fmt, timeout=15)
+            test_ok = True
+            message = f"✅ 连接成功，模型 {test_model} 可用"
         except Exception as e:
-            message = f"❌ 连接失败：{type(e).__name__}: {e}"
+            message = f"❌ 连接失败：{type(e).__name__}: {str(e)[:150]}"
 
     return {"ok": test_ok, "message": message, "models": models}

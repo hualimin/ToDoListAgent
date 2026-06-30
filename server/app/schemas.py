@@ -102,4 +102,5 @@ class TestAgentRequest(BaseModel):
     base_url: str = ""
     api_key: str = ""
     model: str | None = None
+    format: str = "openai"
 

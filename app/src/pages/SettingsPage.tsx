@@ -8,8 +8,9 @@ type Config = Record<string, any>
 interface ProviderEntry {
   name: string
   base_url: string
-  api_key: string // GET 回显为 '***'；编辑时空字符串=不改
-  model?: string // 仅供表单内部使用（选中/手填），不持久化到 provider
+  api_key: string
+  format: string // "openai" | "anthropic"
+  model?: string
 }
 
 const AGENT_LIST = [
@@ -39,7 +40,7 @@ export function SettingsPage() {
 
   // 供应商编辑面板：editingId=null=未开；''=新建；具体id=编辑
   const [editingProvider, setEditingProvider] = useState<string | null>(null)
-  const [providerForm, setProviderForm] = useState<ProviderEntry>({ name: '', base_url: '', api_key: '' })
+  const [providerForm, setProviderForm] = useState<ProviderEntry>({ name: '', base_url: '', api_key: '', format: 'openai' })
   const [detectedModels, setDetectedModels] = useState<string[]>([])
   const [detectMsg, setDetectMsg] = useState('')
   const [selectedModel, setSelectedModel] = useState('')
@@ -98,7 +99,7 @@ export function SettingsPage() {
 
   function openNewProvider() {
     setEditingProvider('')
-    setProviderForm({ name: '', base_url: '', api_key: '' })
+    setProviderForm({ name: '', base_url: '', api_key: '', format: 'openai' })
     setDetectedModels([])
     setDetectMsg('')
     setSelectedModel('')
@@ -107,14 +108,14 @@ export function SettingsPage() {
   function openEditProvider(id: string) {
     const p = config?.providers?.[id]
     setEditingProvider(id)
-    setProviderForm({ name: p?.name || id, base_url: p?.base_url || '', api_key: '' })
+    setProviderForm({ name: p?.name || id, base_url: p?.base_url || '', api_key: '', format: p?.format || 'openai' })
     setDetectedModels(providerModels[id] || [])
     setDetectMsg('')
     setSelectedModel('')
   }
 
   async function detectModelsForForm() {
-    const { base_url, api_key } = providerForm
+    const { base_url, api_key, format } = providerForm
     const isEditing = editingProvider && editingProvider !== ''
     if (!base_url && !isEditing) {
       setDetectMsg('请先填 Base URL')
@@ -127,6 +128,7 @@ export function SettingsPage() {
         base_url,
         api_key: api_key || undefined,
         provider_id: isEditing ? editingProvider : undefined,
+        format,
       })
       setDetectedModels(r.models || [])
       if (r.models?.length) {
@@ -145,7 +147,7 @@ export function SettingsPage() {
       setDetectMsg('请先选择或输入模型名')
       return
     }
-    const { base_url, api_key } = providerForm
+    const { base_url, api_key, format } = providerForm
     const isEditing = editingProvider && editingProvider !== ''
     setDetectMsg('测试中…')
     try {
@@ -154,6 +156,7 @@ export function SettingsPage() {
         api_key: api_key || undefined,
         provider_id: isEditing ? editingProvider : undefined,
         model,
+        format,
       })
       setDetectMsg(r.message)
     } catch (e) {
@@ -162,7 +165,7 @@ export function SettingsPage() {
   }
 
   async function saveProvider() {
-    const { name, base_url, api_key } = providerForm
+    const { name, base_url, api_key, format } = providerForm
     if (!name.trim() || !base_url.trim()) {
       setDetectMsg('请填名称和 Base URL')
       return
@@ -174,7 +177,7 @@ export function SettingsPage() {
       while ((config?.providers || {})[`${id}_${n}`]) n++
       id = `${id}_${n}`
     }
-    const patch: Record<string, any> = { name: name.trim(), base_url: base_url.trim() }
+    const patch: Record<string, any> = { name: name.trim(), base_url: base_url.trim(), format }
     if (api_key.trim()) patch.api_key = api_key.trim()
     try {
       await api().put('/api/config', { providers: { [id]: patch } })
@@ -300,6 +303,24 @@ export function SettingsPage() {
                   value={providerForm.api_key}
                   onChange={(e) => setProviderForm({ ...providerForm, api_key: e.target.value })}
                 />
+                {/* API 格式选择 */}
+                <div className="flex gap-1.5 items-center">
+                  <span className="text-[11px] text-ink3">API 格式：</span>
+                  <button
+                    onClick={() => setProviderForm({ ...providerForm, format: 'openai' })}
+                    className="rounded-pill px-2.5 py-0.5 text-[11px] border cursor-pointer"
+                    style={providerForm.format === 'openai'
+                      ? { background: 'var(--c-accent)', color: 'var(--c-bg)', borderColor: 'var(--c-accent)' }
+                      : { background: 'var(--c-bg)', color: 'var(--c-ink2)', borderColor: 'var(--c-line)' }}
+                  >OpenAI</button>
+                  <button
+                    onClick={() => setProviderForm({ ...providerForm, format: 'anthropic' })}
+                    className="rounded-pill px-2.5 py-0.5 text-[11px] border cursor-pointer"
+                    style={providerForm.format === 'anthropic'
+                      ? { background: 'var(--c-accent)', color: 'var(--c-bg)', borderColor: 'var(--c-accent)' }
+                      : { background: 'var(--c-bg)', color: 'var(--c-ink2)', borderColor: 'var(--c-line)' }}
+                  >Anthropic</button>
+                </div>
                 {detectedModels.length > 0 && (
                   <div className="flex flex-wrap gap-1 py-1">
                     {detectedModels.map((m) => (
