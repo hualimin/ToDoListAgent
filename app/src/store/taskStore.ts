@@ -8,6 +8,7 @@ interface TaskState {
   repo: TaskRepository
   reset: (repo: TaskRepository) => void
   loadFromRepo: () => Promise<void>
+  checkOverdue: () => Promise<number>
   createTask: (input: TaskCreateInput) => Promise<Task>
   updateTask: (id: string, patch: TaskPatch) => Promise<void>
   setStatus: (id: string, status: TaskStatus) => Promise<void>
@@ -21,6 +22,20 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   repo: new InMemoryTaskRepository(),
   reset: (repo) => set({ repo, tasks: [] }),
   loadFromRepo: async () => set({ tasks: await get().repo.getAll() }),
+  checkOverdue: async () => {
+    const now = Date.now()
+    let changed = 0
+    for (const t of get().tasks) {
+      if (t.due_at && (t.status === 'todo' || t.status === 'doing')) {
+        if (new Date(t.due_at).getTime() < now) {
+          await get().repo.update(t.id, { status: 'delayed' })
+          changed++
+        }
+      }
+    }
+    if (changed > 0) set({ tasks: await get().repo.getAll() })
+    return changed
+  },
   createTask: async (input) => {
     const t = await get().repo.create(input)
     set({ tasks: await get().repo.getAll() })
