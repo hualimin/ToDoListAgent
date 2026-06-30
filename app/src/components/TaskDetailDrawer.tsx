@@ -62,6 +62,12 @@ export function TaskDetailDrawer({ task, onClose }: { task: Task | null; onClose
             onChange={(e) => setContent(e.target.value)}
           />
         </div>
+        {task.image_data && (
+          <div>
+            <label className="text-[11px] text-ink3 block mb-1">📷 原图</label>
+            <img src={task.image_data} alt="任务原图" className="rounded-card border border-line max-h-48 object-cover w-full" />
+          </div>
+        )}
         <div className="flex gap-2.5">
           <div className="flex-1">
             <label className="text-[11px] text-ink3 block mb-1">状态</label>
