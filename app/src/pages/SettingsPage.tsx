@@ -9,6 +9,7 @@ interface ProviderEntry {
   name: string
   base_url: string
   api_key: string // GET 回显为 '***'；编辑时空字符串=不改
+  model?: string // 仅供表单内部使用（选中/手填），不持久化到 provider
 }
 
 const AGENT_LIST = [
@@ -20,13 +21,13 @@ const AGENT_LIST = [
 ]
 
 function slugify(name: string): string {
-  // 中文名/特殊字符 → ascii 占位，保证 id 稳定
+  // 中文名/特殊字符 → ascii 占位，保证 id 稳定；全空则用时间戳兜底
   const base = name
     .toLowerCase()
     .replace(/[\s\-]+/g, '_')
     .replace(/[^a-z0-9_]/g, '')
     .replace(/^_+|_+$/g, '')
-  return base || 'provider'
+  return base || 'provider_' + Date.now().toString(36).slice(-4)
 }
 
 export function SettingsPage() {
@@ -41,6 +42,7 @@ export function SettingsPage() {
   const [providerForm, setProviderForm] = useState<ProviderEntry>({ name: '', base_url: '', api_key: '' })
   const [detectedModels, setDetectedModels] = useState<string[]>([])
   const [detectMsg, setDetectMsg] = useState('')
+  const [selectedModel, setSelectedModel] = useState('')
 
   // agent 分配编辑：{funcKey: {provider, model}}
   const [agentEdits, setAgentEdits] = useState<Record<string, { provider: string; model: string }>>({})
@@ -99,6 +101,7 @@ export function SettingsPage() {
     setProviderForm({ name: '', base_url: '', api_key: '' })
     setDetectedModels([])
     setDetectMsg('')
+    setSelectedModel('')
   }
 
   function openEditProvider(id: string) {
@@ -107,36 +110,50 @@ export function SettingsPage() {
     setProviderForm({ name: p?.name || id, base_url: p?.base_url || '', api_key: '' })
     setDetectedModels(providerModels[id] || [])
     setDetectMsg('')
+    setSelectedModel('')
   }
 
   async function detectModelsForForm() {
     const { base_url, api_key } = providerForm
-    if (!base_url || !api_key) {
-      setDetectMsg('请先填 Base URL 和 API Key')
+    const isEditing = editingProvider && editingProvider !== ''
+    if (!base_url && !isEditing) {
+      setDetectMsg('请先填 Base URL')
       return
     }
     setDetectMsg('检测中…')
+    setSelectedModel('')
     try {
       const r = await api().post<{ ok: boolean; message: string; models: string[] }>('/api/config/test-agent', {
-        base_url, api_key,
+        base_url,
+        api_key: api_key || undefined,
+        provider_id: isEditing ? editingProvider : undefined,
       })
       setDetectedModels(r.models || [])
-      setDetectMsg(r.models?.length ? `检测到 ${r.models.length} 个模型` : (r.message || '未检测到模型，可手动填写'))
+      setDetectMsg(
+        r.models?.length
+          ? `检测到 ${r.models.length} 个模型，请选择一个`
+          : r.message || '未检测到，可手动输入模型名',
+      )
     } catch (e) {
       setDetectMsg('检测失败：' + (e as Error).message)
     }
   }
 
   async function testConnectionForForm() {
-    const { base_url, api_key } = providerForm
-    if (!base_url || !api_key) {
-      setDetectMsg('请先填 Base URL 和 API Key')
+    const model = selectedModel || providerForm.model
+    if (!model) {
+      setDetectMsg('请先选择或输入模型名')
       return
     }
+    const { base_url, api_key } = providerForm
+    const isEditing = editingProvider && editingProvider !== ''
     setDetectMsg('测试中…')
     try {
       const r = await api().post<{ ok: boolean; message: string; models: string[] }>('/api/config/test-agent', {
-        base_url, api_key, model: detectedModels[0] || undefined,
+        base_url,
+        api_key: api_key || undefined,
+        provider_id: isEditing ? editingProvider : undefined,
+        model,
       })
       setDetectMsg(r.message)
     } catch (e) {
@@ -286,16 +303,37 @@ export function SettingsPage() {
                 {detectedModels.length > 0 && (
                   <div className="flex flex-wrap gap-1 py-1">
                     {detectedModels.map((m) => (
-                      <span
+                      <button
                         key={m}
-                        className="rounded-pill px-2 py-0.5 text-[11px] border border-line text-ink2"
-                        style={{ background: 'var(--c-card)' }}
+                        onClick={() => {
+                          setSelectedModel(m)
+                          setProviderForm({ ...providerForm, model: m })
+                        }}
+                        className="rounded-pill px-2 py-0.5 text-[11px] border cursor-pointer"
+                        style={
+                          selectedModel === m
+                            ? { background: 'var(--c-accent)', color: 'var(--c-bg)', borderColor: 'var(--c-accent)' }
+                            : { background: 'var(--c-card)', color: 'var(--c-ink2)', borderColor: 'var(--c-line)' }
+                        }
                       >
                         {m}
-                      </span>
+                      </button>
                     ))}
                   </div>
                 )}
+                <input
+                  className="w-full rounded-pill border border-line px-3 py-1 text-xs text-ink"
+                  style={{ background: 'var(--c-bg)' }}
+                  placeholder="或手动输入模型名（如 glm-4-flash）"
+                  value={selectedModel || providerForm.model || ''}
+                  onChange={(e) => {
+                    setSelectedModel(e.target.value)
+                    setProviderForm({ ...providerForm, model: e.target.value })
+                  }}
+                />
+                <p className="text-[10px] text-ink3 leading-relaxed">
+                  ① 填 Base URL + API Key → ② 检测模型 → ③ 选模型 → ④ 测试 → ⑤ 保存
+                </p>
                 {detectMsg && <p className="text-[11px] text-ink3">{detectMsg}</p>}
                 <div className="flex flex-wrap gap-2 pt-1">
                   <button className="rounded-pill border border-line px-2.5 py-1 text-[11px] text-ink2" onClick={detectModelsForForm}>检测可用模型</button>
