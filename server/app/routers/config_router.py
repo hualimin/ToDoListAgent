@@ -65,9 +65,26 @@ def put_config(update: ConfigUpdate, user_id: int = Depends(require_user)):
 
 @router.post("/test-agent")
 def test_agent(req: TestAgentRequest, user_id: int = Depends(require_user)):
-    """测试 AI Agent 配置：列出可用模型 + 验证连接。"""
+    """测试 AI Agent 配置：列出可用模型 + 验证连接。
+    如果 api_key 为空但 provider_id 给了，从已存配置读 Key。"""
     base = req.base_url.rstrip("/")
-    headers = {"Authorization": f"Bearer {req.api_key}", "Content-Type": "application/json"}
+    api_key = req.api_key
+
+    # api_key 为空时，尝试从已存配置加载（编辑已有供应商的场景）
+    if not api_key and req.provider_id:
+        try:
+            secrets = load_secrets()
+            provider = (secrets.providers or {}).get(req.provider_id, {})
+            api_key = provider.get("api_key", "")
+            if not base:
+                base = provider.get("base_url", "").rstrip("/")
+        except Exception:
+            pass
+
+    if not base or not api_key:
+        return {"ok": False, "message": "❌ 缺少 Base URL 或 API Key（新供应商需填入 Key）", "models": []}
+
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
     # 1. 检测可用模型
     models = []

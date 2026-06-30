@@ -98,7 +98,8 @@ class LearningPathResponse(BaseModel):
     concepts: list[LearningConcept] = []
 
 class TestAgentRequest(BaseModel):
-    base_url: str
-    api_key: str
+    provider_id: str | None = None
+    base_url: str = ""
+    api_key: str = ""
     model: str | None = None
 
