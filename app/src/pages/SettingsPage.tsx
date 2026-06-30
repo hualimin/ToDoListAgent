@@ -129,13 +129,13 @@ export function SettingsPage() {
         provider_id: isEditing ? editingProvider : undefined,
       })
       setDetectedModels(r.models || [])
-      setDetectMsg(
-        r.models?.length
-          ? `检测到 ${r.models.length} 个模型，请选择一个`
-          : r.message || '未检测到，可手动输入模型名',
-      )
+      if (r.models?.length) {
+        setDetectMsg(`✅ 检测到 ${r.models.length} 个模型，请选择一个`)
+      } else {
+        setDetectMsg('此 API 不支持自动检测模型列表，请在下方手动输入模型名')
+      }
     } catch (e) {
-      setDetectMsg('检测失败：' + (e as Error).message)
+      setDetectMsg('此 API 不支持自动检测，请在下方手动输入模型名（如 glm-4-flash）')
     }
   }
 
