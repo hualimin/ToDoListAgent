@@ -33,22 +33,46 @@ export function InputBar() {
     if (!text.trim() && !imageB64) return
     const source: InputSource = imageB64 ? 'photo' : usedVoice ? 'voice' : 'text'
     setBusy(true)
-    setMsg('解析中…')
+    setMsg('添加中…')
+    try {
+      // 默认直接创建，不走 AI 解析（原文做标题）
+      await createTask({
+        title: text.trim() || '新任务',
+        urgency: 'normal',
+        due_at: dueAt ? new Date(dueAt).toISOString() : null,
+        input_source: source,
+        image_data: imageB64,
+      })
+      setText(''); setImageB64(null); setImagePreview(null); setUsedVoice(false); setDueAt(''); setShowDue(false); speech.reset(); setMsg('')
+    } catch {
+      setMsg('添加失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // AI 解析（可选，用户主动点）
+  const [aiMode, setAiMode] = useState(false)
+  async function submitWithAI() {
+    if (!text.trim() && !imageB64) return
+    const source: InputSource = imageB64 ? 'photo' : usedVoice ? 'voice' : 'text'
+    setBusy(true)
+    setMsg('AI 解析中…')
     try {
       let parsed = { title: text.trim() || '新任务', content: '', urgency: 'normal' as const, due_at: null as string | null }
-      if (token) {
-        const api = createApiClient({ baseURL, token })
-        const resp = await api.post<{ title: string; content: string; urgency: string; due_at: string | null }>('/api/tasks/parse', {
-          text: text.trim() || undefined, image_base64: imageB64 || undefined,
-        })
-        parsed = { title: resp.title, content: resp.content, urgency: resp.urgency as 'normal', due_at: resp.due_at }
-      }
+      const api = createApiClient({ baseURL, token })
+      const resp = await api.post<{ title: string; content: string; urgency: string; due_at: string | null }>('/api/tasks/parse', {
+        text: text.trim() || undefined, image_base64: imageB64 || undefined,
+      })
+      parsed = { title: resp.title, content: resp.content, urgency: resp.urgency as 'normal', due_at: resp.due_at }
       // 用户手动选的截止时间优先于 AI 解析的
       if (dueAt) parsed.due_at = new Date(dueAt).toISOString()
       await createTask({ title: parsed.title, content: parsed.content, urgency: parsed.urgency, due_at: parsed.due_at, input_source: source, image_data: imageB64 })
-      setText(''); setImageB64(null); setImagePreview(null); setUsedVoice(false); setDueAt(''); setShowDue(false); speech.reset(); setMsg('')
+      setText(''); setImageB64(null); setImagePreview(null); setUsedVoice(false); setDueAt(''); setShowDue(false); setAiMode(false); speech.reset(); setMsg('')
     } catch {
-      await createTask({ title: text.trim() || '新任务', due_at: dueAt ? new Date(dueAt).toISOString() : undefined, input_source: source, image_data: imageB64 })
+      // AI 失败 → 用原文创建
+      await createTask({ title: text.trim() || '新任务', urgency: 'normal', due_at: dueAt ? new Date(dueAt).toISOString() : null, input_source: source, image_data: imageB64 })
+      setText(''); setImageB64(null); setImagePreview(null); setUsedVoice(false); setDueAt(''); setShowDue(false); setAiMode(false); speech.reset()
       setMsg('AI 解析失败，已用原文创建')
     } finally {
       setBusy(false)
@@ -138,13 +162,26 @@ export function InputBar() {
           title="上传图片"
         >📷</button>
 
+        {/* AI 解析开关 */}
+        <button
+          onClick={() => setAiMode(!aiMode)}
+          disabled={busy}
+          className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-sm cursor-pointer"
+          style={{
+            background: aiMode ? 'var(--c-accent)' : 'var(--c-card)',
+            color: aiMode ? 'var(--c-bg)' : 'var(--c-ink2)',
+            border: '1px solid var(--c-line)',
+          }}
+          title={aiMode ? 'AI 解析已开启（再点关闭）' : '开启 AI 解析（自动提取标题/紧急度/截止）'}
+        >✨</button>
+
         {/* 添加按钮 */}
         <button
-          onClick={submit}
+          onClick={aiMode ? submitWithAI : submit}
           disabled={busy || (!text.trim() && !imageB64)}
           className="shrink-0 rounded-pill px-4 py-2 text-sm text-bg font-semibold"
           style={{ background: 'var(--c-accent)' }}
-        >添加</button>
+        >{aiMode ? 'AI 添加' : '添加'}</button>
       </div>
 
       {/* 截止时间选择器（展开时显示） */}
