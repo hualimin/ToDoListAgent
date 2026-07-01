@@ -35,6 +35,11 @@ export function TaskCard({ task, onOpen }: { task: Task; onOpen?: (t: Task) => v
             <span style={{ width: 6, height: 6, borderRadius: 999, background: urgColor(task.urgency), display: 'inline-block' }} />
             {urgLabel(task.urgency)}
           </span>
+          {task.scheduled_at && (
+            <span className="inline-flex items-center gap-0.5" style={{ color: 'var(--c-accent)' }}>
+              📅 {new Date(task.scheduled_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
           {task.due_at && (
             <span className="inline-flex items-center gap-0.5" style={{ color: dueColor, fontWeight: dueStatus !== 'normal' ? 600 : 400 }}>
               {dueUrgency ? `${dueUrgency} · ` : ''}{dueLabel}

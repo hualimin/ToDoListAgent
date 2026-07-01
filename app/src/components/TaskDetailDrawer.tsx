@@ -105,6 +105,14 @@ export function TaskDetailDrawer({ task, onClose }: { task: Task | null; onClose
             onChange={(e) => setDue(e.target.value)}
           />
         </div>
+        {task.scheduled_at && (
+          <div className="rounded-card border border-line p-2.5" style={{ background: 'var(--c-bg2)' }}>
+            <p className="text-[11px] text-ink3">📅 排程时间（系统建议）</p>
+            <p className="text-sm text-ink mt-0.5">
+              {new Date(task.scheduled_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' })}
+            </p>
+          </div>
+        )}
       </div>
       <div className="flex gap-2.5 p-3 border-t border-line">
         <button
