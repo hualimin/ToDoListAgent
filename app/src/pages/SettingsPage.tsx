@@ -206,6 +206,21 @@ export function SettingsPage() {
   // ---- agent 分配 ----
   function setAgentField(funcKey: string, field: 'provider' | 'model', value: string) {
     setAgentEdits((prev) => ({ ...prev, [funcKey]: { ...prev[funcKey], [field]: value } }))
+    // 选了供应商时自动拉取模型列表
+    if (field === 'provider' && value && !providerModels[value]) {
+      fetchProviderModels(value)
+    }
+  }
+
+  async function fetchProviderModels(providerId: string) {
+    try {
+      const r = await api().post<{ ok: boolean; message: string; models: string[] }>('/api/config/test-agent', {
+        provider_id: providerId,
+      })
+      setProviderModels((prev) => ({ ...prev, [providerId]: r.models || [] }))
+    } catch {
+      // 静默失败，用户可手动输入
+    }
   }
 
   async function saveAgent(funcKey: string) {
