@@ -12,7 +12,7 @@ function load(): { baseURL: string; token: string } {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) return JSON.parse(raw)
   } catch { /* ignore */ }
-  return { baseURL: 'http://localhost:8000', token: '' }
+  return { baseURL: 'http://localhost:8010', token: '' }
 }
 
 export const useAuthStore = create<AuthState>((set) => {
