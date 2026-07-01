@@ -16,6 +16,7 @@ export function ArrangePanel() {
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [accepted, setAccepted] = useState<Set<string>>(new Set())
+  const [msg, setMsg] = useState('')
 
   async function arrange() {
     setBusy(true)
@@ -24,6 +25,7 @@ export function ArrangePanel() {
     try {
       const api = createApiClient({ baseURL, token })
       const pending = tasks.filter((t) => t.status === 'todo' || t.status === 'doing' || t.status === 'delayed')
+      if (pending.length === 0) { setSuggestions([]); setMsg('没有待排程任务（需要待办/进行中/延期状态）'); return }
       const busySlots = tasks
         .filter((t) => t.scheduled_at)
         .map((t) => ({ start: t.scheduled_at as string, end: t.scheduled_at as string }))
@@ -37,8 +39,9 @@ export function ArrangePanel() {
         busy: busySlots,
       })
       setSuggestions(resp.results)
-    } catch {
+    } catch (e) {
       setSuggestions([])
+      setMsg('排程失败：' + (e as Error).message + '（检查后端是否在跑 + 令牌是否正确）')
     } finally {
       setBusy(false)
     }
@@ -70,6 +73,7 @@ export function ArrangePanel() {
       >
         {busy ? '排程中…' : suggestions ? '重新排程' : '一键智能排程'}
       </button>
+      {msg && <p className="text-xs mt-1" style={{ color: 'var(--c-urgent)' }}>{msg}</p>}
       {suggestions && suggestions.length > 0 && (
         <div className="mt-2 space-y-2">
           <button onClick={acceptAll} className="text-xs text-accent">
