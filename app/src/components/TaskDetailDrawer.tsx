@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
 import type { Task, TaskStatus, Urgency } from '../db/types'
 import { STATUS_ORDER, STATUS_META } from '../lib/statusMeta'
 import { useTaskStore } from '../store/taskStore'
@@ -61,6 +62,12 @@ export function TaskDetailDrawer({ task, onClose }: { task: Task | null; onClose
             value={content}
             onChange={(e) => setContent(e.target.value)}
           />
+          {content.trim() && (
+            <div className="mt-2 rounded-card border border-line p-2.5 text-sm prose" style={{ background: 'var(--c-bg)' }}>
+              <p className="text-[11px] text-ink3 mb-1">预览</p>
+              <ReactMarkdown>{content}</ReactMarkdown>
+            </div>
+          )}
         </div>
         {task.image_data && (
           <div>

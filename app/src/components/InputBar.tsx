@@ -6,6 +6,13 @@ import { compressImage } from '../lib/imageCompress'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import type { InputSource } from '../db/types'
 
+const URGENCY_LABEL: Record<string, string> = {
+  low: '低',
+  normal: '普通',
+  high: '高',
+  urgent: '紧急',
+}
+
 export function InputBar() {
   const createTask = useTaskStore((s) => s.createTask)
   const baseURL = useAuthStore((s) => s.baseURL)
@@ -18,6 +25,8 @@ export function InputBar() {
   const [usedVoice, setUsedVoice] = useState(false)
   const [dueAt, setDueAt] = useState('') // ISO datetime or empty
   const [showDue, setShowDue] = useState(false)
+  // AI 解析预览（原文 vs 解析结果），为 null 表示不在预览态
+  const [aiPreview, setAiPreview] = useState<{ title: string; content: string; urgency: string; due_at: string | null; original: string } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const speech = useSpeechRecognition()
 
@@ -55,25 +64,48 @@ export function InputBar() {
   const [aiMode, setAiMode] = useState(false)
   async function submitWithAI() {
     if (!text.trim() && !imageB64) return
-    const source: InputSource = imageB64 ? 'photo' : usedVoice ? 'voice' : 'text'
     setBusy(true)
     setMsg('AI 解析中…')
     try {
-      let parsed = { title: text.trim() || '新任务', content: '', urgency: 'normal' as const, due_at: null as string | null }
       const api = createApiClient({ baseURL, token })
       const resp = await api.post<{ title: string; content: string; urgency: string; due_at: string | null }>('/api/tasks/parse', {
         text: text.trim() || undefined, image_base64: imageB64 || undefined,
       })
-      parsed = { title: resp.title, content: resp.content, urgency: resp.urgency as 'normal', due_at: resp.due_at }
       // 用户手动选的截止时间优先于 AI 解析的
-      if (dueAt) parsed.due_at = new Date(dueAt).toISOString()
-      await createTask({ title: parsed.title, content: parsed.content, urgency: parsed.urgency, due_at: parsed.due_at, input_source: source, image_data: imageB64 })
-      setText(''); setImageB64(null); setImagePreview(null); setUsedVoice(false); setDueAt(''); setShowDue(false); setAiMode(false); speech.reset(); setMsg('')
+      const due_at = dueAt ? new Date(dueAt).toISOString() : resp.due_at
+      setAiPreview({
+        title: resp.title,
+        content: resp.content,
+        urgency: resp.urgency,
+        due_at,
+        original: text.trim() || (imageB64 ? '（仅图片）' : ''),
+      })
+      setMsg('')
     } catch {
-      // AI 失败 → 用原文创建
-      await createTask({ title: text.trim() || '新任务', urgency: 'normal', due_at: dueAt ? new Date(dueAt).toISOString() : null, input_source: source, image_data: imageB64 })
-      setText(''); setImageB64(null); setImagePreview(null); setUsedVoice(false); setDueAt(''); setShowDue(false); setAiMode(false); speech.reset()
-      setMsg('AI 解析失败，已用原文创建')
+      setMsg('AI 解析失败，请重试或直接添加')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // 确认创建：用 AI 解析结果创建任务
+  async function confirmAICreate() {
+    if (!aiPreview) return
+    const source: InputSource = imageB64 ? 'photo' : usedVoice ? 'voice' : 'text'
+    setBusy(true)
+    setMsg('创建中…')
+    try {
+      await createTask({
+        title: aiPreview.title,
+        content: aiPreview.content,
+        urgency: aiPreview.urgency as 'normal',
+        due_at: aiPreview.due_at,
+        input_source: source,
+        image_data: imageB64,
+      })
+      setText(''); setImageB64(null); setImagePreview(null); setUsedVoice(false); setDueAt(''); setShowDue(false); setAiMode(false); setAiPreview(null); speech.reset(); setMsg('')
+    } catch {
+      setMsg('创建失败')
     } finally {
       setBusy(false)
     }
@@ -108,6 +140,56 @@ export function InputBar() {
             className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center text-xs"
             style={{ background: 'var(--c-urgent)', color: '#fff' }}
           >✕</button>
+        </div>
+      )}
+
+      {/* AI 解析预览（原文 vs 结果） */}
+      {aiPreview && (
+        <div className="mb-2 rounded-card border p-2.5 text-sm" style={{ background: 'var(--c-card)', borderColor: 'var(--c-accent)' }}>
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <span style={{ color: 'var(--c-accent)' }}>✨</span>
+            <span className="font-semibold text-ink">AI 解析结果</span>
+          </div>
+          <div className="rounded-card border border-line p-2 mb-2" style={{ background: 'var(--c-bg)' }}>
+            <p className="text-[11px] text-ink3 mb-0.5">原文</p>
+            <p className="text-ink whitespace-pre-wrap break-words">{aiPreview.original || '（空）'}</p>
+          </div>
+          <div className="flex flex-col gap-1 text-xs">
+            <div className="flex gap-2">
+              <span className="text-ink3 shrink-0 w-12">标题</span>
+              <span className="text-ink break-words">{aiPreview.title}</span>
+            </div>
+            <div className="flex gap-2">
+              <span className="text-ink3 shrink-0 w-12">紧急度</span>
+              <span className="text-ink">{URGENCY_LABEL[aiPreview.urgency] ?? aiPreview.urgency}</span>
+            </div>
+            <div className="flex gap-2">
+              <span className="text-ink3 shrink-0 w-12">截止</span>
+              <span className="text-ink">
+                {aiPreview.due_at ? new Date(aiPreview.due_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '无'}
+              </span>
+            </div>
+            {aiPreview.content && (
+              <div className="flex gap-2">
+                <span className="text-ink3 shrink-0 w-12">内容</span>
+                <span className="text-ink whitespace-pre-wrap break-words">{aiPreview.content}</span>
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2 mt-2.5">
+            <button
+              onClick={confirmAICreate}
+              disabled={busy}
+              className="flex-1 py-1.5 rounded-pill text-xs font-semibold"
+              style={{ background: 'var(--c-accent)', color: 'var(--c-bg)' }}
+            >确认创建</button>
+            <button
+              onClick={() => { setAiPreview(null); setMsg('') }}
+              disabled={busy}
+              className="flex-1 py-1.5 rounded-pill text-xs"
+              style={{ background: 'transparent', border: '1px solid var(--c-line)', color: 'var(--c-ink2)' }}
+            >取消</button>
+          </div>
         </div>
       )}
 
