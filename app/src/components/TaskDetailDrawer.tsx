@@ -96,9 +96,9 @@ export function TaskDetailDrawer({ task, onClose }: { task: Task | null; onClose
           </div>
         </div>
         <div>
-          <label className="text-[11px] text-ink3 block mb-1">截止日期</label>
+          <label className="text-[11px] text-ink3 block mb-1">截止时间</label>
           <input
-            type="date"
+            type="datetime-local"
             className="w-full rounded-card border border-line p-2.5 text-sm text-ink"
             style={{ background: 'var(--c-card)' }}
             value={due}

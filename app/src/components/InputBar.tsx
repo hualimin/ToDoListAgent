@@ -16,6 +16,8 @@ export function InputBar() {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [imageB64, setImageB64] = useState<string | null>(null)
   const [usedVoice, setUsedVoice] = useState(false)
+  const [dueAt, setDueAt] = useState('') // ISO datetime or empty
+  const [showDue, setShowDue] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const speech = useSpeechRecognition()
 
@@ -41,10 +43,12 @@ export function InputBar() {
         })
         parsed = { title: resp.title, content: resp.content, urgency: resp.urgency as 'normal', due_at: resp.due_at }
       }
+      // 用户手动选的截止时间优先于 AI 解析的
+      if (dueAt) parsed.due_at = new Date(dueAt).toISOString()
       await createTask({ title: parsed.title, content: parsed.content, urgency: parsed.urgency, due_at: parsed.due_at, input_source: source, image_data: imageB64 })
-      setText(''); setImageB64(null); setImagePreview(null); setUsedVoice(false); speech.reset(); setMsg('')
+      setText(''); setImageB64(null); setImagePreview(null); setUsedVoice(false); setDueAt(''); setShowDue(false); speech.reset(); setMsg('')
     } catch {
-      await createTask({ title: text.trim() || '新任务', input_source: source, image_data: imageB64 })
+      await createTask({ title: text.trim() || '新任务', due_at: dueAt ? new Date(dueAt).toISOString() : undefined, input_source: source, image_data: imageB64 })
       setMsg('AI 解析失败，已用原文创建')
     } finally {
       setBusy(false)
@@ -112,6 +116,19 @@ export function InputBar() {
           </button>
         )}
 
+        {/* 截止时间按钮 */}
+        <button
+          onClick={() => setShowDue(!showDue)}
+          disabled={busy}
+          className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-sm cursor-pointer"
+          style={{
+            background: dueAt ? 'var(--c-accent)' : 'var(--c-card)',
+            color: dueAt ? 'var(--c-bg)' : 'var(--c-ink2)',
+            border: '1px solid var(--c-line)',
+          }}
+          title="截止时间"
+        >⏰</button>
+
         {/* 照片按钮（选图后显示预览，不隐藏文字框） */}
         <button
           onClick={() => fileRef.current?.click()}
@@ -129,6 +146,33 @@ export function InputBar() {
           style={{ background: 'var(--c-accent)' }}
         >添加</button>
       </div>
+
+      {/* 截止时间选择器（展开时显示） */}
+      {showDue && (
+        <div className="flex gap-2 items-center mt-1.5">
+          <input
+            type="datetime-local"
+            className="flex-1 rounded-pill border border-line bg-card px-3 py-1.5 text-xs text-ink"
+            value={dueAt}
+            onChange={(e) => setDueAt(e.target.value)}
+          />
+          {dueAt && (
+            <button
+              onClick={() => setDueAt('')}
+              className="text-xs text-ink2"
+            >清除</button>
+          )}
+          <button
+            onClick={() => setShowDue(false)}
+            className="text-xs text-ink2"
+          >收起</button>
+        </div>
+      )}
+      {dueAt && !showDue && (
+        <p className="text-xs mt-1" style={{ color: 'var(--c-accent)' }}>
+          ⏰ 截止：{new Date(dueAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+        </p>
+      )}
 
       {/* 状态提示 */}
       {speech.listening && <p className="text-xs text-accent mt-1">🎤 正在聆听…说完点🛑停止</p>}
