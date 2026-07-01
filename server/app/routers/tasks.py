@@ -4,6 +4,7 @@ from app.parse_utils import extract_title, extract_urgency, extract_due_at
 from app.schemas import (
     ParseRequest,
     ParseResponse,
+    ParseResponseItem,
     ArrangeRequest,
     ArrangeResponse,
     ArrangeResultItem,
