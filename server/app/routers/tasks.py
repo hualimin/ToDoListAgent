@@ -18,9 +18,17 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 @router.post("/parse", response_model=ParseResponse)
 def parse_task(req: ParseRequest, user_id: int = Depends(require_user)):
-    now = datetime.now(timezone.utc)
+    from app.parse_utils import CST
+    now = datetime.now(CST)
     input_text = req.text or ""
-    blocks = [{"type": "text", "text": f"请分析以下内容并简要描述这是什么待办任务、紧急程度、截止时间：\n{input_text}"}]
+    # 直接的提示词：提取信息，不要长篇分析
+    blocks = [{"type": "text", "text": (
+        f"用户输入了一句话描述待办任务。请直接提取以下信息，用简洁的中文回答，不要用 markdown 格式、不要加标题符号、不要写分析报告：\n"
+        f"1. 任务标题（10字以内，直接说是什么事）\n"
+        f"2. 紧急程度（正常/重要/紧急）\n"
+        f"3. 截止时间（如果有，说明具体什么时候）\n\n"
+        f"用户输入：{input_text}"
+    )}]
     if req.image_base64:
         blocks.append({"type": "image_url", "image_url": {"url": req.image_base64}})
     try:
@@ -29,12 +37,16 @@ def parse_task(req: ParseRequest, user_id: int = Depends(require_user)):
         raw = ""
     if raw:
         return ParseResponse(
-            title=extract_title(raw), content=raw, urgency=extract_urgency(raw),
-            due_at=extract_due_at(raw, now=now), raw_response=raw,
+            title=extract_title(raw),
+            content=input_text,  # 内容 = 用户原始输入，不是 AI 分析报告
+            urgency=extract_urgency(raw),
+            due_at=extract_due_at(raw, now=now),
+            raw_response=raw,
         )
     return ParseResponse(
         title=extract_title(input_text) if input_text else "新任务",
-        content="", urgency="normal", due_at=None, raw_response="",
+        content=input_text,
+        urgency="normal", due_at=None, raw_response="",
     )
 
 
