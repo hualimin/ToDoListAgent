@@ -23,7 +23,7 @@ export function ArrangePanel() {
     setAccepted(new Set())
     try {
       const api = createApiClient({ baseURL, token })
-      const pending = tasks.filter((t) => t.status === 'todo' || t.status === 'doing')
+      const pending = tasks.filter((t) => t.status === 'todo' || t.status === 'doing' || t.status === 'delayed')
       const busySlots = tasks
         .filter((t) => t.scheduled_at)
         .map((t) => ({ start: t.scheduled_at as string, end: t.scheduled_at as string }))
