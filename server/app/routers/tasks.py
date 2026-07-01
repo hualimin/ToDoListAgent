@@ -21,12 +21,13 @@ def parse_task(req: ParseRequest, user_id: int = Depends(require_user)):
     from app.parse_utils import CST
     now = datetime.now(CST)
     input_text = req.text or ""
-    # 直接的提示词：提取信息，不要长篇分析
     blocks = [{"type": "text", "text": (
-        f"用户输入了一句话描述待办任务。请直接提取以下信息，用简洁的中文回答，不要用 markdown 格式、不要加标题符号、不要写分析报告：\n"
-        f"1. 任务标题（10字以内，直接说是什么事）\n"
-        f"2. 紧急程度（正常/重要/紧急）\n"
-        f"3. 截止时间（如果有，说明具体什么时候）\n\n"
+        f"用户输入了一段话，可能包含1个或多个待办任务。请拆分成独立任务，每个返回：\n"
+        f"1. title: 任务标题（10字以内，直接说是什么事，不加markdown）\n"
+        f"2. urgency: 紧急程度（normal/high/urgent）\n"
+        f"3. due_at: 截止时间（如果有，说明具体日期时间）\n\n"
+        f"返回 JSON：{{\"group_label\": \"这组任务的统称（如PPT准备）\", \"tasks\": [{{\"title\":\"...\",\"urgency\":\"normal\",\"due_at\":\"...\"}}]}}\n"
+        f"只返回JSON，不要其他文字。\n\n"
         f"用户输入：{input_text}"
     )}]
     if req.image_base64:
@@ -35,18 +36,34 @@ def parse_task(req: ParseRequest, user_id: int = Depends(require_user)):
         raw = call_agent_multimodal("task_parse", blocks)
     except Exception:
         raw = ""
+
     if raw:
+        import json as _json
+        try:
+            data = _json.loads(raw)
+            group_label = data.get("group_label", "")
+            raw_tasks = data.get("tasks", [])
+            items = []
+            for rt in raw_tasks:
+                items.append(ParseResponseItem(
+                    title=rt.get("title", "新任务"),
+                    urgency=rt.get("urgency", "normal"),
+                    due_at=extract_due_at(rt.get("due_at", "") + " " + rt.get("title", ""), now=now) or extract_due_at(raw, now=now),
+                    content=input_text,
+                ))
+            if not items:
+                items = [ParseResponseItem(title=extract_title(raw), urgency=extract_urgency(raw), due_at=extract_due_at(raw, now=now), content=input_text)]
+            return ParseResponse(tasks=items, original=input_text, group_label=group_label)
+        except (_json.JSONDecodeError, Exception):
+            pass
+        # JSON 解析失败 → 单任务降级
         return ParseResponse(
-            title=extract_title(raw),
-            content=input_text,  # 内容 = 用户原始输入，不是 AI 分析报告
-            urgency=extract_urgency(raw),
-            due_at=extract_due_at(raw, now=now),
-            raw_response=raw,
+            tasks=[ParseResponseItem(title=extract_title(raw), urgency=extract_urgency(raw), due_at=extract_due_at(raw, now=now), content=input_text)],
+            original=input_text, group_label="",
         )
     return ParseResponse(
-        title=extract_title(input_text) if input_text else "新任务",
-        content=input_text,
-        urgency="normal", due_at=None, raw_response="",
+        tasks=[ParseResponseItem(title=extract_title(input_text) if input_text else "新任务", content=input_text)],
+        original=input_text, group_label="",
     )
 
 

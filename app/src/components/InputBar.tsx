@@ -25,8 +25,12 @@ export function InputBar() {
   const [usedVoice, setUsedVoice] = useState(false)
   const [dueAt, setDueAt] = useState('') // ISO datetime or empty
   const [showDue, setShowDue] = useState(false)
-  // AI 解析预览（原文 vs 解析结果），为 null 表示不在预览态
-  const [aiPreview, setAiPreview] = useState<{ title: string; content: string; urgency: string; due_at: string | null; original: string } | null>(null)
+  // AI 解析预览（多任务），为 null 表示不在预览态
+  const [aiPreview, setAiPreview] = useState<{
+    tasks: { title: string; content: string; urgency: string; due_at: string | null }[]
+    original: string
+    group_label: string
+  } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const speech = useSpeechRecognition()
 
@@ -68,17 +72,17 @@ export function InputBar() {
     setMsg('AI 解析中…')
     try {
       const api = createApiClient({ baseURL, token })
-      const resp = await api.post<{ title: string; content: string; urgency: string; due_at: string | null }>('/api/tasks/parse', {
+      const resp = await api.post<{ tasks: { title: string; content: string; urgency: string; due_at: string | null }[]; original: string; group_label: string }>('/api/tasks/parse', {
         text: text.trim() || undefined, image_base64: imageB64 || undefined,
       })
-      // 用户手动选的截止时间优先于 AI 解析的
-      const due_at = dueAt ? new Date(dueAt).toISOString() : resp.due_at
+      const tasks = (resp.tasks || []).map((t) => ({
+        ...t,
+        due_at: dueAt ? new Date(dueAt).toISOString() : t.due_at,
+      }))
       setAiPreview({
-        title: resp.title,
-        content: resp.content,
-        urgency: resp.urgency,
-        due_at,
+        tasks,
         original: text.trim() || (imageB64 ? '（仅图片）' : ''),
+        group_label: resp.group_label || '',
       })
       setMsg('')
     } catch {
@@ -88,21 +92,25 @@ export function InputBar() {
     }
   }
 
-  // 确认创建：用 AI 解析结果创建任务
+  // 确认创建：用 AI 解析结果创建任务（可能多个）
   async function confirmAICreate() {
     if (!aiPreview) return
     const source: InputSource = imageB64 ? 'photo' : usedVoice ? 'voice' : 'text'
+    const gid = aiPreview.tasks.length > 1 ? `g_${Date.now().toString(36)}` : null
     setBusy(true)
     setMsg('创建中…')
     try {
-      await createTask({
-        title: aiPreview.title,
-        content: aiPreview.content,
-        urgency: aiPreview.urgency as 'normal',
-        due_at: aiPreview.due_at,
-        input_source: source,
-        image_data: imageB64,
-      })
+      for (const t of aiPreview.tasks) {
+        await createTask({
+          title: t.title,
+          content: t.content || aiPreview.original,
+          urgency: t.urgency as 'normal',
+          due_at: t.due_at,
+          input_source: source,
+          image_data: imageB64,
+          group_id: gid,
+        })
+      }
       setText(''); setImageB64(null); setImagePreview(null); setUsedVoice(false); setDueAt(''); setShowDue(false); setAiMode(false); setAiPreview(null); speech.reset(); setMsg('')
     } catch {
       setMsg('创建失败')
@@ -143,38 +151,41 @@ export function InputBar() {
         </div>
       )}
 
-      {/* AI 解析预览（原文 vs 结果） */}
+      {/* AI 解析预览（多任务） */}
       {aiPreview && (
         <div className="mb-2 rounded-card border p-2.5 text-sm" style={{ background: 'var(--c-card)', borderColor: 'var(--c-accent)' }}>
           <div className="flex items-center gap-1.5 mb-1.5">
             <span style={{ color: 'var(--c-accent)' }}>✨</span>
             <span className="font-semibold text-ink">AI 解析结果</span>
+            {aiPreview.tasks.length > 1 && (
+              <span className="text-[10px] rounded-pill px-1.5 py-0.5" style={{ background: 'var(--c-accent)', color: 'var(--c-bg)' }}>
+                {aiPreview.tasks.length} 个任务{aiPreview.group_label ? ` · ${aiPreview.group_label}` : ''}
+              </span>
+            )}
           </div>
+          {/* 原文 */}
           <div className="rounded-card border border-line p-2 mb-2" style={{ background: 'var(--c-bg)' }}>
-            <p className="text-[11px] text-ink3 mb-0.5">原文</p>
+            <p className="text-[11px] text-ink3 mb-0.5">原始内容</p>
             <p className="text-ink whitespace-pre-wrap break-words">{aiPreview.original || '（空）'}</p>
           </div>
-          <div className="flex flex-col gap-1 text-xs">
-            <div className="flex gap-2">
-              <span className="text-ink3 shrink-0 w-12">标题</span>
-              <span className="text-ink break-words">{aiPreview.title}</span>
-            </div>
-            <div className="flex gap-2">
-              <span className="text-ink3 shrink-0 w-12">紧急度</span>
-              <span className="text-ink">{URGENCY_LABEL[aiPreview.urgency] ?? aiPreview.urgency}</span>
-            </div>
-            <div className="flex gap-2">
-              <span className="text-ink3 shrink-0 w-12">截止</span>
-              <span className="text-ink">
-                {aiPreview.due_at ? new Date(aiPreview.due_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '无'}
-              </span>
-            </div>
-            {aiPreview.content && (
-              <div className="flex gap-2">
-                <span className="text-ink3 shrink-0 w-12">内容</span>
-                <span className="text-ink whitespace-pre-wrap break-words">{aiPreview.content}</span>
+          {/* 每个解析出的任务 */}
+          <div className="space-y-1.5">
+            {aiPreview.tasks.map((t, i) => (
+              <div key={i} className="rounded-card border border-line p-2" style={{ background: 'var(--c-bg)' }}>
+                <div className="flex items-center gap-1.5">
+                  {aiPreview.tasks.length > 1 && <span className="text-[10px] text-ink3 shrink-0">#{i + 1}</span>}
+                  <span className="text-ink font-medium flex-1 truncate">{t.title}</span>
+                  <span className="text-[10px]" style={{ color: t.urgency === 'urgent' ? 'var(--c-urgent)' : t.urgency === 'high' ? 'var(--c-late)' : 'var(--c-ink3)' }}>
+                    {URGENCY_LABEL[t.urgency] ?? t.urgency}
+                  </span>
+                </div>
+                {t.due_at && (
+                  <p className="text-[11px] text-ink3 mt-0.5">
+                    📅 {new Date(t.due_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                )}
               </div>
-            )}
+            ))}
           </div>
           <div className="flex gap-2 mt-2.5">
             <button
@@ -182,7 +193,7 @@ export function InputBar() {
               disabled={busy}
               className="flex-1 py-1.5 rounded-pill text-xs font-semibold"
               style={{ background: 'var(--c-accent)', color: 'var(--c-bg)' }}
-            >确认创建</button>
+            >确认创建（{aiPreview.tasks.length} 个任务）</button>
             <button
               onClick={() => { setAiPreview(null); setMsg('') }}
               disabled={busy}

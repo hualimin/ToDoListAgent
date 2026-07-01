@@ -41,12 +41,17 @@ class ParseRequest(BaseModel):
     image_base64: str | None = None
 
 
-class ParseResponse(BaseModel):
+class ParseResponseItem(BaseModel):
     title: str
-    content: str
     urgency: str = "normal"
     due_at: str | None = None
-    raw_response: str = ""
+    content: str = ""
+
+
+class ParseResponse(BaseModel):
+    tasks: list[ParseResponseItem] = []
+    original: str = ""
+    group_label: str = ""
 
 
 class ArrangeTaskItem(BaseModel):

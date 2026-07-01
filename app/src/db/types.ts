@@ -19,6 +19,7 @@ export interface Task {
   deleted_at: string | null
   sync_state: SyncState
   image_data: string | null
+  group_id: string | null
 }
 
 export interface TaskCreateInput {
@@ -29,6 +30,7 @@ export interface TaskCreateInput {
   due_at?: string | null
   scheduled_at?: string | null
   image_data?: string | null
+  group_id?: string | null
 }
 
 export type TaskPatch = Partial<Omit<Task, 'id' | 'user_id' | 'created_at'>>

@@ -54,7 +54,7 @@ export function TaskDetailDrawer({ task, onClose }: { task: Task | null; onClose
           />
         </div>
         <div>
-          <label htmlFor="tdd-content" className="text-[11px] text-ink3 block mb-1">内容</label>
+          <label htmlFor="tdd-content" className="text-[11px] text-ink3 block mb-1">原始内容</label>
           <textarea
             id="tdd-content"
             className="w-full rounded-card border border-line p-2.5 text-sm text-ink min-h-[70px]"
@@ -64,7 +64,7 @@ export function TaskDetailDrawer({ task, onClose }: { task: Task | null; onClose
           />
           {content.trim() && (
             <div className="mt-2 rounded-card border border-line p-2.5 text-sm prose" style={{ background: 'var(--c-bg)' }}>
-              <p className="text-[11px] text-ink3 mb-1">预览</p>
+              <p className="text-[11px] text-ink3 mb-1">AI 解析内容</p>
               <ReactMarkdown>{content}</ReactMarkdown>
             </div>
           )}
